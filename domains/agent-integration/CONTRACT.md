@@ -22,15 +22,23 @@ responses.
 4. Browsers without WebMCP retain the complete human interface.
 5. Widgets in iframes communicate with the top-level adapter rather than
    registering hidden workspace tools.
+6. The adapter registers one stable tool set for the lifetime of the page. Each
+   `execute` handler reads the current runtime, visible surface, role, and revision
+   at call time rather than capturing stale selection state.
+7. Read tools declare `readOnlyHint`; results containing workspace-authored text
+   declare the draft specification's untrusted-content annotation when the browser
+   supports it. Names, descriptions, inputs, and outputs stay within documented
+   browser budgets.
+8. The production origin sends `Origin-Agent-Cluster: ?1` and
+   `Permissions-Policy: tools=(self)`.
 
 ## Initial tools
 
 | Tool | Permission | Domain action | Verifiable result |
 |---|---|---|---|
-| `inspect_current_surface` | read | Read the current visible surface projection | Surface ID, visible element IDs, and revisions |
-| `apply_surface_patch` | edit | Dispatch one typed element patch | Operation ID, changed IDs, sync state, and revisions when committed |
-| `create_notebook` | edit | Dispatch one notebook-creation command | New item and surface IDs plus receipt |
-| `create_document` | edit | Dispatch one document-creation command | New item and surface IDs plus receipt |
+| `inspect_surface` | read | Read the current visible surface projection | Surface ID, visible element IDs, and revisions |
+| `patch_surface` | edit | Dispatch one typed element patch | Operation ID, changed IDs, sync state, and revisions when committed |
+| `create_item` | edit | Dispatch one notebook- or document-creation command | New item and surface IDs plus receipt |
 | `focus_item` | local page control | Ask `ViewportController` to focus an item | The item ID actually focused by the page |
 
 ## Inspection guarantees
@@ -70,3 +78,7 @@ A queued operation retains its honest queued receipt and can be inspected later.
 - A queued result never includes a fabricated server revision.
 - A viewer session can inspect but cannot invoke a durable mutation.
 - Tool output and logs contain no session or storage secret.
+- A browser compatibility court discovers the top-level imperative tools in the
+  current ChatGPT built-in browser and the current Chrome WebMCP trial build.
+- Agent evals prove tool selection, schema adherence, cancellation, visible result
+  before success, and bounded output on representative human-agent tasks.

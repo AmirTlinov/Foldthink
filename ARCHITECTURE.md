@@ -375,10 +375,13 @@ CommandReceipt
 |-- surfaces[]
 |   |-- surfaceId
 |   `-- revision?       # appears after the server commit
-`-- syncState           # local | queued | committed
+`-- syncState           # local | queued | committed | rejected
 ```
 
-The interface may continue after a local receipt. By default, a mutating WebMCP
+The interface may continue after a local receipt. A rejected receipt names the
+reason and the committed revisions from which synchronization rebuilt the local
+replica; rejection never attempts to subtract a Yjs update from a live document.
+By default, a mutating WebMCP
 tool waits for a server acknowledgement within a bounded timeout. While offline,
 it honestly returns `queued`, and the agent does not describe the change as visible
 on another device until a later inspection verifies it.
@@ -422,6 +425,9 @@ The conversion happens once at input. The Canvas backing store follows
 `devicePixelRatio` and `ResizeObserver`; a window change reallocates the buffer and
 rerenders the complete scene instead of stretching old pixels.
 
+One `GestureArena` classifies every pointer sequence and grants it to one owner
+until every participating pointer ends. Pointer capture, cancellation,
+`touch-action`, selection, and context-menu suppression follow that decision.
 Fingers control the camera and objects. Pencil controls ink. The pinch focus is
 fixed in world space when the gesture begins. Opening a notebook is an explicit
 `board -> entering(item, progress) -> item` transition: progress follows the
@@ -456,20 +462,26 @@ checks membership, records the unique `operationId`, registers declared surfaces
 appends Yjs updates, increments each surface's monotonic revision, and broadcasts
 the acknowledgement only after commit.
 
-An operation carries typed intent and a CRDT payload scoped to its surfaces.
+An operation carries the complete typed intent and a CRDT payload scoped to its
+surfaces. The server computes `changedIds`; the client never declares its own
+semantic result as trusted input.
 `SyncGateway` applies that payload to a validation copy of the materialized state
 and invokes the public schemas and invariants of the owning domains before commit.
 Client validation improves UX; the server repeats it as a security boundary. Only
 an accepted typed
 operation enters the journal.
 
-The client removes an outbox record only after acknowledgement. If the operation is
+The client removes an outbox record only after acknowledgement. HTTP response and
+WebSocket broadcast can arrive in either order and converge through the same
+`operationId`. If the operation is
 retried, the server returns the stored receipt. During recovery, the client fetches
 the latest compact snapshot and the updates after its revision, applies them, and
 then flushes the outbox. A snapshot contains the CRDT fact of deletion, so a stale
 client cannot resurrect erased content merely by reconnecting.
 
-Camera, selection, hovered tool, and unfinished gesture are transient local state.
+On typed rejection, the client builds fresh documents from committed server state,
+replays only surviving independent outbox operations, stores the repaired replica
+atomically, and publishes one repaired scene. Camera, selection, hovered tool, and unfinished gesture are transient local state.
 They join synchronization only as live presence if the product later needs a shared
 pointer.
 
@@ -557,10 +569,12 @@ output never replaces the source.
 
 An interactive element lives as a `Widget` beside the document flow and visually
 matches the typography of the page. `WidgetHost` runs its HTML/CSS/JS in a sandboxed
-iframe on a separate origin. It communicates with the document through typed
-`postMessage` events. Widget code receives only explicitly granted messages and
-network capabilities; cookies, the parent DOM, and the WebMCP API remain with the
-top-level page.
+iframe on a separate origin without `allow-same-origin`; the iframe therefore has
+an opaque origin. One bootstrap `postMessage` verifies `event.source`, transfers a
+dedicated `MessageChannel`, and all later communication uses that capability with
+a nonce, versioned schemas, and size limits. Widget code receives only explicitly
+granted messages and network capabilities; cookies, the parent DOM, and the WebMCP
+API remain with the top-level page.
 
 LaTeX therefore owns the document, while JavaScript owns an interactive window
 inside it. They form one page visually while keeping separate, safe ownership.
@@ -572,14 +586,13 @@ inside it. They form one page visually while keeping separate, safe ownership.
 a hidden owner of the workspace. WebMCP is a progressive enhancement: the board
 continues to work in a browser without this API.
 
-The initial tool set remains narrow:
+The initial stable tool set remains narrow:
 
 | Tool | Action | Result verification |
 |---|---|---|
-| `inspect_current_surface` | Returns visible elements, IDs, and current revisions | The agent understands exactly what the person sees |
-| `apply_surface_patch` | Creates one typed domain operation | Returns `operationId`, `changedIds`, and server revisions |
-| `create_notebook` | Creates a manifest, cover, and first page | The new item appears in the workspace manifest |
-| `create_document` | Creates a document manifest and surface | The document opens on both devices |
+| `inspect_surface` | Returns visible elements, IDs, and current revisions | The agent understands exactly what the person sees |
+| `patch_surface` | Creates one typed domain operation | Returns `operationId`, `changedIds`, and server revisions |
+| `create_item` | Creates a notebook or document through one discriminated command | The new item and its surfaces appear atomically |
 | `focus_item` | Changes the current browser's local camera | Returns the item that actually received focus |
 
 Tool JSON Schemas come from the same domain schemas that `WorkspaceRuntime` uses
@@ -587,6 +600,13 @@ to validate application commands. A tool returns no cookie, join token, or
 object-store key. After a
 mutation, the agent can inspect again and compare revisions rather than treating
 the tool call itself as proof of success.
+
+The tools are registered once in the top-level page, while each handler reads the
+fresh runtime and selection at execution. Production sends
+`Origin-Agent-Cluster: ?1` and `Permissions-Policy: tools=(self)`. Agent-authored or
+workspace-authored text is treated as untrusted tool content, and an executable
+agent-eval court verifies selection, cancellation, bounded output, and that the
+interface visibly changes before a mutating tool reports success.
 
 ## 14. Deployment
 
@@ -716,19 +736,22 @@ The architecture is fulfilled only through observable scenarios.
 Every stage ends with a working vertical slice:
 
 1. **Local surface.** The PWA opens directly to the board, Canvas 2D draws one
-   stroke, and `WorkspaceRuntime` stores it in one IndexedDB.
-2. **Durable sync.** Anonymous session, PostgreSQL, idempotent operation,
+   stroke, and `WorkspaceRuntime` stores it in one IndexedDB. This slice passes in
+   a real browser and on a physical iPad before server work can hide input defects.
+2. **WebMCP on the real runtime.** Stable inspection and patch tools call the
+   executable `WorkspaceRuntime`; unsupported browsers keep the full human path.
+3. **Durable sync.** Anonymous session, PostgreSQL, idempotent operation,
    WebSocket, acknowledgement, reload, offline outbox, and two browsers pass
    end-to-end.
-3. **Spatial workspace.** Manifest, notebook, document, surfaces, movement, stacks,
+4. **Human-agent proof.** Pencil input on iPad reaches the Mac page; a WebMCP patch
+   returns through the same durable path and appears on both devices.
+5. **Spatial workspace.** Manifest, notebook, document, surfaces, movement, stacks,
    and the pinch-controlled transition use one coordinate system.
-4. **Ink completeness.** Pressure, eraser, undo, resize, and Pencil pass physical
+6. **Ink completeness.** Pressure, eraser, undo, resize, and Pencil pass physical
    device testing.
-5. **Agent loop.** Inspection and patching use the same dispatcher and verify the
-   result by revision.
-6. **Rich document.** Markdown, KaTeX, restricted Tectonic, and sandboxed widgets
+7. **Rich document.** Markdown, KaTeX, restricted Tectonic, and sandboxed widgets
    extend the same block model.
-7. **Public readiness.** CSP, limits, monitoring, WAL archiving, a clean restore,
+8. **Public readiness.** CSP, limits, monitoring, WAL archiving, a clean restore,
    and data deletion pass the release gate.
 
 This order keeps the primary risk in the center: the person and the agent must first

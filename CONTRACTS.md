@@ -108,7 +108,8 @@ also updates [ARCHITECTURE.md](ARCHITECTURE.md). Changing a public or persisted 
 shape adds an explicit migration or protocol version. Rewording that preserves the
 same observable behavior needs no compatibility layer.
 
-The first implementation slice activates the workspace, surface, interaction,
-local persistence, synchronization, and identity contracts. Later slices activate
-documents, agent integration, assets, and operations without changing the mutation
-path established by the first slice.
+The first implementation slice activates only the workspace, surface, interaction,
+local-persistence, and web composition owners needed for a complete offline stroke.
+The next slice adds identity and synchronization without replacing that mutation
+path. Agent integration then binds WebMCP to the already executable runtime;
+documents, assets, and recovery expand the same product loop in later slices.

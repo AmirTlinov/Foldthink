@@ -29,6 +29,7 @@ prove the same atomic boundary.
 ```text
 commitLocal(operation, surfaceUpdates, localReceipt)
 acknowledge(operationId, committedReceipt)
+reject(operationId, rejectedReceipt, repairedSurfaceStates, survivingOutbox)
 loadWorkspace(workspaceId)
 remapBootstrapWorkspace(oldId, newId)
 ```
@@ -53,12 +54,18 @@ submits a server acknowledgement.
    remote send.
 8. IndexedDB schema migration either opens the new complete schema or leaves the
    previous schema readable by the recovery path.
+9. Rejection installs repaired surface states, the rejected receipt, and the
+   surviving outbox in one transaction.
+10. A `versionchange` request closes the current connection and asks the page shell
+    to reload instead of leaving another tab blocked on an obsolete schema.
 
 ## Result
 
 `commitLocal` returns a `queued` receipt. `acknowledge` returns the stored
-`committed` receipt. `loadWorkspace` returns a consistent set of surface snapshots,
-later updates, outbox operations, and receipts from one known schema version.
+`committed` receipt. `reject` returns the stored `rejected` receipt after the
+repaired replica is durable. `loadWorkspace` returns a consistent set of surface
+snapshots, later updates, outbox operations, and receipts from one known schema
+version.
 
 ## Failure
 
@@ -76,3 +83,12 @@ record for diagnostics.
 - Repeated acknowledgements leave one receipt and no outbox duplicate.
 - A quota failure never produces a `queued` receipt.
 - A bootstrap remap leaves no reference to the old workspace ID.
+- A rejected dependent update cannot reappear after reload from a stale tab.
+
+## Application-shell boundary
+
+IndexedDB owns user data, not the executable application shell. The web
+composition root owns service-worker installation, cache revision activation, and
+the visible request to reload into a compatible protocol. A new worker never
+silently claims a page whose loaded code cannot read the persisted schema or
+queued protocol version.

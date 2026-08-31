@@ -21,8 +21,9 @@ OperationEnvelope
 |-- protocolVersion
 |-- operationId
 |-- workspaceId
-|-- commandKind
-|-- changedIds[]
+|-- intent
+|   |-- kind
+|   `-- payload
 |-- createSurfaces[]?
 `-- updates[]
     |-- surfaceId
@@ -39,6 +40,11 @@ CommittedReceipt
     |-- surfaceId
     `-- revision
 ```
+
+A rejected receipt contains the same `operationId`, a typed reason, supported
+protocol information when relevant, and the committed revisions used for repair.
+`changedIds` is never accepted as client authority: `SyncGateway` computes it from
+the validated semantic transition.
 
 A live message contains `workspaceId`, `surfaceId`, `strokeId`, an increasing
 sequence number, and ephemeral actual samples. It contains no durable operation.
@@ -57,6 +63,14 @@ record. The client envelope cannot choose the committed actor.
 5. Live chunks may be dropped, reordered by sequence number, or replaced by the
    final durable element without affecting durable state.
 6. Connection backoff is bounded and resets after a healthy acknowledged exchange.
+7. HTTP acknowledgement and WebSocket broadcast may arrive in either order. The
+   client correlates both by `operationId` and stores one monotonic receipt.
+8. A typed rejection rebuilds fresh documents from committed server state, replays
+   only independent valid outbox operations, and atomically installs the repaired
+   replica before rendering it.
+9. Live preview applies backpressure from the transport's queued-byte count and
+   may replace intermediate preview chunks while preserving the final durable
+   operation.
 
 ## SyncGateway guarantees
 
@@ -66,7 +80,8 @@ record. The client envelope cannot choose the committed actor.
    schemas are checked
    before persistence.
 3. The CRDT payload is applied to a validation copy of materialized room state, and
-   domain invariants pass before commit.
+   domain invariants pass before commit. The gateway verifies that the typed intent
+   and semantic transition agree, then derives `changedIds` itself.
 4. One accepted operation creates one `workspace_operations` record.
 5. Declared surface creation, all surface updates, per-surface revision increments,
    and the receipt commit in one PostgreSQL transaction.
@@ -104,3 +119,7 @@ local data.
   remote valid work.
 - Snapshot compaction followed by stale-client reconnect preserves deletion.
 - A broadcast is never observed before its operation is readable from PostgreSQL.
+- Receiving broadcast before HTTP response, or HTTP response before broadcast,
+  leaves one identical committed receipt.
+- A rejected update is absent after repair and cannot be resurrected by later
+  dependent outbox replay.

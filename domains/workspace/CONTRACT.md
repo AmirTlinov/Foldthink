@@ -63,18 +63,23 @@ CommandReceipt
 |-- surfaces[]
 |   |-- surfaceId
 |   `-- revision?
-`-- syncState           # local | queued | committed
+`-- syncState           # local | queued | committed | rejected
 ```
 
 The local path returns `local` or `queued`. The synchronization domain attaches
-server revisions and advances the same receipt to `committed`.
+server revisions and advances the same receipt to `committed`. A typed server
+rejection advances it to `rejected`; that terminal state names the rejection and
+the last committed revisions from which the local replica was repaired.
 
 ## Failure
 
 Validation failure leaves every scene unchanged and returns a typed domain error.
 Local persistence failure leaves the operation visibly unsaved and returns no
 `queued` or `committed` claim. A remote update that fails validation is quarantined
-by the synchronization domain and does not enter the loaded scene.
+by the synchronization domain and does not enter the loaded scene. Rejection never
+tries to subtract a Yjs update. The synchronization owner reconstructs a fresh
+document from committed server state, replays surviving outbox operations, and
+publishes that repaired scene as one visible transition.
 
 ## Executable proof
 
@@ -84,3 +89,5 @@ by the synchronization domain and does not enter the loaded scene.
 - A multi-surface notebook creation appears completely or not at all.
 - Applying a remote update produces no outbox record.
 - Repeating a stable invocation key returns the existing operation receipt.
+- A rejected operation is absent after repair while independent later operations
+  remain visible and queued.

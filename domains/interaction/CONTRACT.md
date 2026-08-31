@@ -12,8 +12,22 @@
 | `ViewportController` | Camera transform, selection, pinch focus, and board/item transition | Current browser session |
 | `CanvasSceneRenderer` | Pixels derived from scene snapshots, active input, and viewport | One rendered frame |
 
-The DOM pointer adapter routes Pencil input to `InkSession` and finger gestures to
-`ViewportController`. Routing contains no durable workspace state.
+The DOM pointer adapter gives every pointer sequence to one `GestureArena`. The
+arena classifies pen or eraser input, object drag, pan, pinch, page turn,
+stationary two-finger undo, tap, and double-tap candidates. Once a candidate wins,
+that owner keeps the sequence until every participating pointer ends or is
+cancelled. Routing contains no durable workspace state.
+
+## GestureArena guarantees
+
+1. One physical pointer sequence has one winning intent owner.
+2. Pointer capture follows that owner and `lostpointercapture` has the same cleanup
+   consequence as cancellation.
+3. `touch-action`, selection, and context-menu behavior are set at the canvas
+   boundary rather than repaired by unrelated UI handlers.
+4. A second pointer can turn an unclaimed touch sequence into pinch or stationary
+   two-finger undo, but cannot steal an already committed Pencil stroke.
+5. Every ended or cancelled sequence releases all transient pointer state.
 
 ## InkSession guarantees
 
@@ -71,3 +85,5 @@ diagnostic event.
 - A pinch anchor remains fixed within an explicit pixel tolerance.
 - Every cancelled or ended transition reaches a stable board or item state.
 - Resize and `devicePixelRatio` changes preserve semantic geometry and proportions.
+- Competing touch candidates produce exactly one pan, pinch, page turn, or undo
+  command for each decided sequence.
