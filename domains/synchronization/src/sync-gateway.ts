@@ -54,7 +54,9 @@ function intentSurfaces(intent: CommandIntent): readonly Readonly<{
   }
   const changes: readonly SceneChange[] = intent.kind === "commitStroke"
     ? [{ action: "put", element: intent.stroke }]
-    : intent.changes;
+    : intent.kind === "eraseInk"
+      ? [{ action: "put", element: intent.mask }]
+      : intent.changes;
   return [Object.freeze({
     surfaceId: intent.surfaceId,
     changes,
@@ -124,6 +126,12 @@ function validateMeaning(
       } else if (nextReferences.some((surfaceId) => !createdSurfaceIds.has(surfaceId))) {
         throw new SyncRejection("invalid_operation", "A workspace item must be created with its cover and pages.");
       }
+    }
+    if (
+      nextElement.kind === "erase" &&
+      nextElement.affectedStrokeIds.some((strokeId) => beforeById.get(strokeId)?.kind !== "ink")
+    ) {
+      throw new SyncRejection("invalid_operation", "An erase mask may name only existing ink strokes.");
     }
     if (stable(afterById.get(id)) !== stable(expectedElement(change, previous))) {
       throw new SyncRejection("invalid_operation", "The put intent does not match its CRDT update.");

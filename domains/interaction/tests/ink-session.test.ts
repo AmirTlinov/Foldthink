@@ -17,6 +17,25 @@ test("one active session keeps one stroke ID and ordered actual samples", () => 
   assert.deepEqual(stroke.points.map((point) => point.time), [1, 3]);
 });
 
+test("predicted samples draw ahead but never enter the durable stroke", () => {
+  const session = new InkSession(
+    "predicted-stroke",
+    { color: "#171714", width: 4, minimumOpacity: 0.2, maximumOpacity: 1 },
+    { x: 0, y: 0, pressure: 0.2, time: 1 },
+  );
+  session.predict([
+    { x: 10, y: 8, pressure: 0.7, time: 2 },
+    { x: 20, y: 12, pressure: 0.8, time: 3 },
+  ]);
+
+  assert.equal(session.stroke().points.length, 1);
+  assert.deepEqual(session.displayStroke().points.map((point) => point.time), [1, 2, 3]);
+
+  session.append([{ x: 9, y: 7, pressure: 0.65, time: 2 }]);
+  assert.deepEqual(session.stroke().points.map((point) => point.time), [1, 2]);
+  assert.deepEqual(session.displayStroke().points.map((point) => point.time), [1, 2]);
+});
+
 test("pinch keeps its world anchor under the same screen point", () => {
   const viewport = new ViewportController();
   const anchor = { x: 300, y: 200 };

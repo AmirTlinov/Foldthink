@@ -13,9 +13,10 @@ network replay enter through its public methods.
 ## Owned state
 
 `WorkspaceRuntime` owns the in-memory registry of loaded `SceneDocument` instances,
-the current command transaction, and the relationship between one command and one
-`CommandReceipt`. Durable scene content remains owned by `SceneDocument`; delivery
-state remains owned by `LocalWorkspaceStore` and the synchronization domain.
+the current command transaction, the relationship between one command and one
+`CommandReceipt`, and the current session's bounded inverse history for the local
+actor. Durable scene content remains owned by `SceneDocument`; delivery state
+remains owned by `LocalWorkspaceStore` and the synchronization domain.
 
 ## Accepted input
 
@@ -53,6 +54,8 @@ as local intent.
 7. Remote replay changes the scene without creating a new outgoing operation.
 8. Undo creates a new inverse semantic operation for the current actor; it does not
    rewrite acknowledged history.
+9. A failed inverse commit keeps its history record available for retry. A stale
+   record is discarded only after the scene proves its target is already absent.
 
 ## Result
 
@@ -91,5 +94,7 @@ Implemented by [workspace-runtime.test.ts](tests/workspace-runtime.test.ts).
 - A multi-surface notebook creation appears completely or not at all.
 - Applying a remote update produces no outbox record.
 - Repeating a stable invocation key returns the existing operation receipt.
+- Pen and eraser actions undo in reverse order through new durable scene facts.
+- A persistence failure leaves the same inverse action available for a later retry.
 - A rejected operation is absent after repair while independent later operations
   remain visible and queued.

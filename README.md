@@ -8,10 +8,13 @@ draw on, and change together.
 The executable surface opens without registration. A person can draw on the
 infinite board, create notebooks or documents, write on their covers, move and
 stack them, open one continuously, and turn or add pages. Pointer and Pencil input
-stay outside React's render path, while every completed action is committed
-atomically to IndexedDB. When a Foldthink server is available, the same outbox is
-acknowledged by PostgreSQL and delivered to linked browsers. Page-local WebMCP
-tools inspect and patch that exact runtime rather than a second agent-only model.
+stay outside React's render path. Pencil pressure changes line opacity, the eraser
+removes crossed geometry rather than whole strokes, and a stationary two-finger
+tap undoes the latest local mark; holding both fingers repeats undo. Every
+completed action is committed atomically to IndexedDB. When a Foldthink server is
+available, the same outbox is acknowledged by PostgreSQL and delivered to linked
+browsers. Page-local WebMCP tools inspect and patch that exact runtime rather than
+a second agent-only model.
 
 ## Run locally
 

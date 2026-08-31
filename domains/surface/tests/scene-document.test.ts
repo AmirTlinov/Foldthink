@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
-import { SceneDocument, type InkStroke } from "../src/public.js";
+import { SceneDocument, type EraseMask, type InkStroke } from "../src/public.js";
 
 function stroke(id: string, x: number): InkStroke {
   return {
@@ -47,4 +47,32 @@ test("a snapshot and later update reconstruct the exact scene", () => {
   const restored = new SceneDocument("board", snapshot);
   restored.applyUpdate(later.update);
   assert.deepEqual(restored.snapshot().elements, scene.snapshot().elements);
+});
+
+test("an erase mask is durable geometry and deleting it restores the stroke fact", () => {
+  const scene = new SceneDocument("page-one");
+  const ink = stroke("ink-one", 10);
+  scene.transact([{ action: "put", element: ink }], "ink");
+  const mask: EraseMask = {
+    id: "erase-one",
+    kind: "erase",
+    version: 1,
+    points: [
+      { x: 12, y: 8, pressure: 0.1, time: 3 },
+      { x: 18, y: 22, pressure: 0.9, time: 4 },
+    ],
+    style: { minimumWidth: 10, maximumWidth: 80 },
+    affectedStrokeIds: [ink.id],
+  };
+  const erased = scene.transact([{ action: "put", element: mask }], "erase");
+
+  const restored = new SceneDocument("page-one", scene.encodeState());
+  assert.deepEqual(restored.snapshot().elements.map((element) => element.id), [mask.id, ink.id]);
+  restored.transact([{
+    action: "delete",
+    elementId: mask.id,
+    expectedVersion: 1,
+  }], "undo");
+  assert.deepEqual(restored.snapshot().elements, [ink]);
+  assert.deepEqual(erased.changedIds, [mask.id]);
 });

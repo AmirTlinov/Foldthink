@@ -1,4 +1,4 @@
-import type { InkStroke, SceneChange } from "@foldthink/surface";
+import type { EraseMask, InkStroke, SceneChange } from "@foldthink/surface";
 
 export type CommitStrokeIntent = Readonly<{
   kind: "commitStroke";
@@ -9,6 +9,19 @@ export type CommitStrokeIntent = Readonly<{
 export type PatchSurfaceIntent = Readonly<{
   kind: "patchSurface";
   surfaceId: string;
+  changes: readonly SceneChange[];
+}>;
+
+export type EraseInkIntent = Readonly<{
+  kind: "eraseInk";
+  surfaceId: string;
+  mask: EraseMask;
+}>;
+
+export type UndoOwnActionIntent = Readonly<{
+  kind: "undoOwnAction";
+  surfaceId: string;
+  targetOperationId: string;
   changes: readonly SceneChange[];
 }>;
 
@@ -24,7 +37,12 @@ export type CreateSurfacesIntent = Readonly<{
   }>[];
 }>;
 
-export type CommandIntent = CommitStrokeIntent | PatchSurfaceIntent | CreateSurfacesIntent;
+export type CommandIntent =
+  | CommitStrokeIntent
+  | EraseInkIntent
+  | UndoOwnActionIntent
+  | PatchSurfaceIntent
+  | CreateSurfacesIntent;
 
 export type SurfaceOperationUpdate = Readonly<{
   surfaceId: string;

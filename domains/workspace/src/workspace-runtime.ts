@@ -1,4 +1,5 @@
 import {
+  SceneConflictError,
   SceneDocument,
   type SceneChange,
   type SurfaceSnapshot,
@@ -13,6 +14,11 @@ type StagedSurface = Readonly<{
   document: SceneDocument;
   update: Uint8Array;
   changedIds: readonly string[];
+}>;
+
+type UndoRecord = Readonly<{
+  operationId: string;
+  changes: readonly SceneChange[];
 }>;
 
 export type WorkspaceSurfaceState = Readonly<{
@@ -38,6 +44,7 @@ export class WorkspaceRuntime {
   readonly #invocations = new Map<string, Promise<CommandReceipt>>();
   readonly #listeners = new Map<string, Set<(snapshot: SurfaceSnapshot) => void>>();
   readonly #allListeners = new Set<(snapshot: SurfaceSnapshot) => void>();
+  readonly #undoBySurface = new Map<string, UndoRecord[]>();
 
   constructor(
     workspaceId: string,
@@ -102,6 +109,30 @@ export class WorkspaceRuntime {
     return pending;
   }
 
+  async undoOwnAction(surfaceId: string): Promise<CommandReceipt | undefined> {
+    const history = this.#undoBySurface.get(surfaceId);
+    while (history && history.length > 0) {
+      const record = history.at(-1);
+      if (!record) return undefined;
+      try {
+        const receipt = await this.dispatch({
+          kind: "undoOwnAction",
+          surfaceId,
+          targetOperationId: record.operationId,
+          changes: record.changes,
+        });
+        history.pop();
+        if (history.length === 0) this.#undoBySurface.delete(surfaceId);
+        return receipt;
+      } catch (error) {
+        if (!(error instanceof SceneConflictError)) throw error;
+        history.pop();
+      }
+    }
+    this.#undoBySurface.delete(surfaceId);
+    return undefined;
+  }
+
   async #dispatch(intent: CommandIntent): Promise<CommandReceipt> {
     const operationId = crypto.randomUUID();
     const staged = this.#stageIn(this.#surfaces, intent, operationId);
@@ -146,6 +177,20 @@ export class WorkspaceRuntime {
     // runtime. A notebook manifest, cover, and first page are one transition,
     // rather than three briefly inconsistent frames.
     for (const snapshot of snapshots) this.#publish(snapshot);
+    if (intent.kind === "commitStroke" || intent.kind === "eraseInk") {
+      const elementId = intent.kind === "commitStroke" ? intent.stroke.id : intent.mask.id;
+      const history = this.#undoBySurface.get(intent.surfaceId) ?? [];
+      history.push(Object.freeze({
+        operationId,
+        changes: Object.freeze([Object.freeze({
+          action: "delete",
+          elementId,
+          expectedVersion: 1,
+        })]),
+      }));
+      if (history.length > 200) history.splice(0, history.length - 200);
+      this.#undoBySurface.set(intent.surfaceId, history);
+    }
     return queuedReceipt;
   }
 
@@ -283,7 +328,9 @@ export class WorkspaceRuntime {
     const document = live.fork();
     const changes: readonly SceneChange[] = intent.kind === "commitStroke"
       ? [{ action: "put", element: intent.stroke }]
-      : intent.changes;
+      : intent.kind === "eraseInk"
+        ? [{ action: "put", element: intent.mask }]
+        : intent.changes;
     const mutation = document.transact(changes, operationId);
     return Object.freeze([Object.freeze({
       surfaceId: intent.surfaceId,

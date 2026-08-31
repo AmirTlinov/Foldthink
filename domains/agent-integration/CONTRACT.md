@@ -46,7 +46,9 @@ responses.
    raw Yjs internals.
 3. Large binary content is represented by scoped asset metadata or a bounded
    preview.
-4. A follow-up inspection can determine whether returned revisions or changed IDs
+4. Ink is summarized by bounded geometry, pressure range, and visible style;
+   erasure is summarized by bounded geometry and a bounded affected-stroke list.
+5. A follow-up inspection can determine whether returned revisions or changed IDs
    actually changed.
 
 ## Mutation guarantees
@@ -75,6 +77,8 @@ A queued operation retains its honest queued receipt and can be inspected later.
 - A committed tool result is visible after reload and on a linked device.
 - A queued result never includes a fabricated server revision.
 - A viewer session can inspect but cannot invoke a durable mutation.
+- The generic patch tool cannot bypass the dedicated geometric-erasure or atomic
+  workspace-item commands.
 - Tool output and logs contain no session or storage secret.
 - A browser compatibility court discovers the top-level imperative tools in the
   current ChatGPT built-in browser and the current Chrome WebMCP trial build.

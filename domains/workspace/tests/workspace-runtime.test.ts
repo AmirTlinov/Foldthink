@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SceneDocument, type InkStroke, type WorkspaceItem } from "@foldthink/surface";
+import {
+  SceneDocument,
+  type EraseMask,
+  type InkStroke,
+  type WorkspaceItem,
+} from "@foldthink/surface";
 import {
   WorkspaceRuntime,
   type CommandReceipt,
@@ -60,6 +65,73 @@ test("a failed local commit publishes no scene transition", async () => {
     runtime.dispatch({ kind: "commitStroke", surfaceId: "board", stroke }),
     /storage failed/,
   );
+  assert.equal(runtime.inspect("board").elements.length, 0);
+});
+
+test("undo records inverse ink operations instead of rewriting scene history", async () => {
+  const sink = new MemorySink();
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], sink);
+  const mask: EraseMask = {
+    id: "erase-one",
+    kind: "erase",
+    version: 1,
+    points: [
+      { x: 14, y: 8, pressure: 0.2, time: 3 },
+      { x: 14, y: 22, pressure: 0.8, time: 4 },
+    ],
+    style: { minimumWidth: 12, maximumWidth: 40 },
+    affectedStrokeIds: [stroke.id],
+  };
+
+  const strokeReceipt = await runtime.dispatch({ kind: "commitStroke", surfaceId: "board", stroke });
+  const eraseReceipt = await runtime.dispatch({ kind: "eraseInk", surfaceId: "board", mask });
+  assert.deepEqual(runtime.inspect("board").elements.map((element) => element.id), ["erase-one", "stroke-one"]);
+
+  const eraseUndo = await runtime.undoOwnAction("board");
+  assert.deepEqual(eraseUndo?.changedIds, [mask.id]);
+  assert.deepEqual(runtime.inspect("board").elements.map((element) => element.id), [stroke.id]);
+
+  const strokeUndo = await runtime.undoOwnAction("board");
+  assert.deepEqual(strokeUndo?.changedIds, [stroke.id]);
+  assert.equal(runtime.inspect("board").elements.length, 0);
+  assert.equal(await runtime.undoOwnAction("board"), undefined);
+  assert.deepEqual(sink.commits.map((commit) => commit.operation.intent.kind), [
+    "commitStroke",
+    "eraseInk",
+    "undoOwnAction",
+    "undoOwnAction",
+  ]);
+  assert.equal(
+    sink.commits[2]?.operation.intent.kind === "undoOwnAction"
+      ? sink.commits[2].operation.intent.targetOperationId
+      : undefined,
+    eraseReceipt.operationId,
+  );
+  assert.equal(
+    sink.commits[3]?.operation.intent.kind === "undoOwnAction"
+      ? sink.commits[3].operation.intent.targetOperationId
+      : undefined,
+    strokeReceipt.operationId,
+  );
+});
+
+test("a failed undo keeps its record available for a safe retry", async () => {
+  let failUndo = true;
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], {
+    async commitLocal(commit): Promise<CommandReceipt> {
+      if (commit.operation.intent.kind === "undoOwnAction" && failUndo) {
+        failUndo = false;
+        throw new Error("storage unavailable");
+      }
+      return { ...commit.receipt, syncState: "queued" };
+    },
+    async commitRemote(): Promise<void> {},
+  });
+  await runtime.dispatch({ kind: "commitStroke", surfaceId: "board", stroke });
+
+  await assert.rejects(runtime.undoOwnAction("board"), /storage unavailable/u);
+  assert.equal(runtime.inspect("board").elements[0]?.id, stroke.id);
+  await runtime.undoOwnAction("board");
   assert.equal(runtime.inspect("board").elements.length, 0);
 });
 

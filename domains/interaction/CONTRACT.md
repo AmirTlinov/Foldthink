@@ -2,17 +2,19 @@
 
 > Domain: active input, viewport state, and visual readout.
 >
-> Owners: `InkSession`, `ViewportController`, `SpatialWorkspaceController`, and
-> `CanvasSceneRenderer`.
+> Owners: `DrawingToolController`, `InkSession`, `EraseSession`,
+> `ViewportController`, `SpatialWorkspaceController`, and `CanvasSceneRenderer`.
 
 ## Responsibility split
 
 | Owner | Owned responsibility | State lifetime |
 |---|---|---|
-| `InkSession` | The active pen or eraser gesture and its actual samples | One pointer gesture |
+| `DrawingToolController` | Selected pen or eraser and its validated pressure policy | Current browser session |
+| `InkSession` | One active pen stroke, actual samples, and disposable prediction | One Pencil gesture |
+| `EraseSession` | One active eraser path and incrementally intersected stroke IDs | One Pencil gesture |
 | `ViewportController` | Board camera transform and pinch anchor | Current browser session |
 | `SpatialWorkspaceController` | Selection, move feedback, and board/item transition | Current browser session |
-| `CanvasSceneRenderer` | Pixels derived from scene snapshots, active input, and viewport | One rendered frame |
+| `CanvasSceneRenderer` | Pixels and reusable stable-frame layers derived from snapshots, active input, and viewport | Current canvas lifetime |
 
 The DOM pointer adapter gives every pointer sequence to one `GestureArena`. The
 arena classifies pen or eraser input, object drag, pan, pinch, page turn,
@@ -31,20 +33,22 @@ cancelled. Routing contains no durable workspace state.
    two-finger undo, but cannot steal an already committed Pencil stroke.
 5. Every ended or cancelled sequence releases all transient pointer state.
 
-## InkSession guarantees
+## Drawing guarantees
 
 1. `pointerdown` creates one active gesture with one stable element ID.
 2. Real Pointer Events and coalesced events extend the actual point buffer in
    timestamp order.
 3. Predicted events may draw ahead for one frame and are discarded when actual
    events arrive. They never enter a command or persistent store.
-4. `pointerup` emits exactly one `CommitStroke` or `EraseInk` intent using the same
-   active ID.
+4. `pointerup` emits exactly one `CommitStroke` or `EraseInk` intent using the
+   active ID; there is no second replacement stroke.
 5. `pointercancel` removes the active overlay and emits no durable command.
 6. Pressure maps from the tool's configured minimum opacity toward its maximum; a
    device without pressure uses a defined neutral value.
-7. Eraser geometry is hit-tested in surface-local coordinates and produces an
-   `EraseMask`, not whole-element deletion.
+7. Eraser geometry is hit-tested incrementally through a surface-local spatial
+   index and produces one pressure-sized `EraseMask` naming the strokes it crosses.
+8. Two stationary fingers emit one inverse operation on tap, then repeat at a
+   bounded cadence while held. Finger travel hands the sequence to pinch instead.
 
 ## Viewport and spatial workspace guarantees
 
@@ -66,13 +70,17 @@ cancelled. Routing contains no durable workspace state.
 1. React is outside the per-sample ink path.
 2. The active stroke and durable stroke share one geometry lifecycle and one ID.
    The durable element becomes visible before the active overlay is cleared.
-3. Ink and eraser masks are composed on a transparent layer above the page
-   material, preserving the grid.
-4. Canvas backing dimensions track CSS size and `devicePixelRatio` through
+3. A stable frame is cached below active pen pixels, so a Pencil sample does not
+   redraw the board, pages, text, and every committed stroke.
+4. Ink and eraser masks are composed per affected stroke on a transparent layer
+   above the page material. An old mask never erases a later or unrelated stroke.
+5. Canvas backing dimensions track CSS size and `devicePixelRatio` through
    `ResizeObserver`.
-5. Resize reallocates the backing store and rerenders semantic content instead of
+6. Resize reallocates the backing store and rerenders semantic content instead of
    stretching old pixels.
-6. The renderer reads snapshots and emits pixels; it never edits domain state.
+7. Page material and semantic page content use one canonical transform, so resize
+   cannot detach ink from its five-millimeter grid.
+8. The renderer reads snapshots and emits pixels; it never edits domain state.
 
 ## Failure
 
@@ -83,15 +91,23 @@ diagnostic event.
 
 ## Executable proof
 
-Implemented by [ink-session.test.ts](tests/ink-session.test.ts) and
+Implemented by [drawing-tool-controller.test.ts](tests/drawing-tool-controller.test.ts),
+[erase-session.test.ts](tests/erase-session.test.ts),
+[ink-geometry.test.ts](tests/ink-geometry.test.ts),
+[ink-session.test.ts](tests/ink-session.test.ts),
+[page-grid.test.ts](tests/page-grid.test.ts), and
 [spatial-workspace-controller.test.ts](tests/spatial-workspace-controller.test.ts).
 
 - One physical stroke yields one durable `InkStroke` with no replacement flash.
 - Predicted samples never appear in serialized geometry.
 - Pencil pressure changes opacity between the configured minimum and maximum.
-- Partial erasure survives reload and remains absent after reconnect.
+- Partial erasure and its inverse survive reload and reconnect.
 - A pinch anchor remains fixed within an explicit pixel tolerance.
 - Every cancelled or ended transition reaches a stable board or item state.
 - Resize and `devicePixelRatio` changes preserve semantic geometry and proportions.
 - Competing touch candidates produce exactly one pan, pinch, page turn, or undo
   command for each decided sequence.
+
+The complete browser path, including Pencil pressure, partial erasure, resize,
+reload, quick two-finger undo, and held repeat, is proved by
+[professional-ink.test.ts](../../tests/journeys/professional-ink.test.ts).

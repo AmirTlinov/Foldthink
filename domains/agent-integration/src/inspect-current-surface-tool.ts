@@ -12,15 +12,25 @@ function bounds(points: readonly Readonly<{ x: number; y: number }>[]): Readonly
   width: number;
   height: number;
 }> {
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const minimumX = Math.min(...xs);
-  const minimumY = Math.min(...ys);
+  const first = points[0];
+  if (!first) return Object.freeze({ x: 0, y: 0, width: 0, height: 0 });
+  let minimumX = first.x;
+  let minimumY = first.y;
+  let maximumX = first.x;
+  let maximumY = first.y;
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    if (!point) continue;
+    minimumX = Math.min(minimumX, point.x);
+    minimumY = Math.min(minimumY, point.y);
+    maximumX = Math.max(maximumX, point.x);
+    maximumY = Math.max(maximumY, point.y);
+  }
   return Object.freeze({
     x: minimumX,
     y: minimumY,
-    width: Math.max(...xs) - minimumX,
-    height: Math.max(...ys) - minimumY,
+    width: maximumX - minimumX,
+    height: maximumY - minimumY,
   });
 }
 
@@ -34,6 +44,27 @@ function inspectElement(element: SceneElement): Readonly<Record<string, unknown>
       bounds: bounds(element.points),
       color: element.style.color,
       width: element.style.width,
+      minimumOpacity: element.style.minimumOpacity,
+      maximumOpacity: element.style.maximumOpacity,
+      pressureRange: Object.freeze({
+        minimum: element.points.reduce((minimum, point) => Math.min(minimum, point.pressure), 1),
+        maximum: element.points.reduce((maximum, point) => Math.max(maximum, point.pressure), 0),
+      }),
+    });
+  }
+  if (element.kind === "erase") {
+    const visibleStrokeIds = element.affectedStrokeIds.slice(0, 64);
+    return Object.freeze({
+      id: element.id,
+      kind: element.kind,
+      version: element.version,
+      pointCount: element.points.length,
+      bounds: bounds(element.points),
+      minimumWidth: element.style.minimumWidth,
+      maximumWidth: element.style.maximumWidth,
+      affectedStrokeCount: element.affectedStrokeIds.length,
+      affectedStrokeIds: Object.freeze(visibleStrokeIds),
+      affectedStrokeIdsTruncated: visibleStrokeIds.length < element.affectedStrokeIds.length,
     });
   }
   if (element.kind === "markdown") {

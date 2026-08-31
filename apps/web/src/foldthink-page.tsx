@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { SpatialViewState } from "@foldthink/interaction/browser";
+import type { DrawingToolState, SpatialViewState } from "@foldthink/interaction/browser";
 import { composeWebRuntime, type WebRuntime } from "./compose-web-runtime.js";
 
 export function FoldthinkPage(): React.JSX.Element {
@@ -8,6 +8,8 @@ export function FoldthinkPage(): React.JSX.Element {
   const [status, setStatus] = useState("Opening local surface");
   const [spatial, setSpatial] = useState<SpatialViewState>({ mode: "board" });
   const [creating, setCreating] = useState(false);
+  const [toolPanel, setToolPanel] = useState(false);
+  const [drawingTool, setDrawingTool] = useState<DrawingToolState>();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -15,6 +17,7 @@ export function FoldthinkPage(): React.JSX.Element {
     let destroyed = false;
     let destroy: (() => void) | undefined;
     let stopSpatial: (() => void) | undefined;
+    let stopDrawingTool: (() => void) | undefined;
     void composeWebRuntime(canvas, setStatus)
       .then((runtime) => {
         if (destroyed) {
@@ -24,12 +27,15 @@ export function FoldthinkPage(): React.JSX.Element {
         runtimeRef.current = runtime;
         setSpatial(runtime.spatialState());
         stopSpatial = runtime.observeSpatial(setSpatial);
+        setDrawingTool(runtime.drawingToolState());
+        stopDrawingTool = runtime.observeDrawingTool(setDrawingTool);
         destroy = runtime.destroy;
       })
       .catch(() => setStatus("Foldthink could not open this surface"));
     return () => {
       destroyed = true;
       stopSpatial?.();
+      stopDrawingTool?.();
       destroy?.();
       runtimeRef.current = undefined;
     };
@@ -53,7 +59,10 @@ export function FoldthinkPage(): React.JSX.Element {
         ref={canvasRef}
         className="thinking-surface"
         aria-label="Foldthink shared surface"
-        onPointerDown={() => setCreating(false)}
+        onPointerDown={() => {
+          setCreating(false);
+          setToolPanel(false);
+        }}
       />
 
       <nav className="surface-actions" aria-label="Workspace actions">
@@ -124,6 +133,97 @@ export function FoldthinkPage(): React.JSX.Element {
               </button>
             )}
           </>
+        )}
+      </nav>
+
+      <nav className="drawing-actions" aria-label="Drawing tools">
+        <button
+          type="button"
+          className="round-action"
+          aria-label="Drawing tools"
+          aria-expanded={toolPanel}
+          aria-controls="drawing-tool-panel"
+          onClick={() => setToolPanel((visible) => !visible)}
+        >
+          {drawingTool?.selected === "eraser" ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m7 17 9.5-9.5 3 3L10 20H6l-2-2 3-3m7 2 3 3" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m5 19 3.4-.8L19 7.6 16.4 5 5.8 15.6 5 19Zm9.7-12.3 2.6 2.6" />
+            </svg>
+          )}
+        </button>
+        {toolPanel && drawingTool && (
+          <section id="drawing-tool-panel" className="tool-panel" aria-label="Drawing tool settings">
+            <div className="tool-choice" aria-label="Active drawing tool">
+              <button
+                type="button"
+                aria-pressed={drawingTool.selected === "pen"}
+                onClick={() => runtimeRef.current?.selectDrawingTool("pen")}
+              >
+                Pen
+              </button>
+              <button
+                type="button"
+                aria-pressed={drawingTool.selected === "eraser"}
+                onClick={() => runtimeRef.current?.selectDrawingTool("eraser")}
+              >
+                Eraser
+              </button>
+            </div>
+            {drawingTool.selected === "pen" ? (
+              <>
+                <label className="tool-row color-row" htmlFor="pen-color">
+                  <span>Color</span>
+                  <input
+                    id="pen-color"
+                    type="color"
+                    value={drawingTool.pen.color}
+                    onChange={(event) => runtimeRef.current?.setPenColor(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="tool-row" htmlFor="pen-width">
+                  <span>Width <output aria-hidden="true">{drawingTool.pen.width.toFixed(1)}</output></span>
+                  <input
+                    id="pen-width"
+                    type="range"
+                    min="0.5"
+                    max="20"
+                    step="0.5"
+                    value={drawingTool.pen.width}
+                    onChange={(event) => runtimeRef.current?.setPenWidth(event.currentTarget.valueAsNumber)}
+                  />
+                </label>
+                <label className="tool-row" htmlFor="pen-minimum-opacity">
+                  <span>Lightest pressure <output aria-hidden="true">{Math.round(drawingTool.pen.minimumOpacity * 100)}%</output></span>
+                  <input
+                    id="pen-minimum-opacity"
+                    type="range"
+                    min="0.02"
+                    max="0.9"
+                    step="0.01"
+                    value={drawingTool.pen.minimumOpacity}
+                    onChange={(event) => runtimeRef.current?.setMinimumOpacity(event.currentTarget.valueAsNumber)}
+                  />
+                </label>
+              </>
+            ) : (
+              <label className="tool-row" htmlFor="eraser-size">
+                <span>Size <output aria-hidden="true">{Math.round(drawingTool.eraser.maximumWidth)}</output></span>
+                <input
+                  id="eraser-size"
+                  type="range"
+                  min="12"
+                  max="240"
+                  step="2"
+                  value={drawingTool.eraser.maximumWidth}
+                  onChange={(event) => runtimeRef.current?.setEraserWidth(event.currentTarget.valueAsNumber)}
+                />
+              </label>
+            )}
+          </section>
         )}
       </nav>
 

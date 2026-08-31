@@ -50,8 +50,15 @@ body {
   gap: 10px;
 }
 
+.drawing-actions {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+}
+
 .round-action,
-.creation-choices {
+.creation-choices,
+.tool-panel {
   border: 1px solid rgba(23, 23, 20, 0.07);
   background: rgba(248, 248, 244, 0.9);
   box-shadow: 0 10px 30px rgba(23, 23, 20, 0.1);
@@ -78,9 +85,81 @@ body {
 }
 
 .round-action:focus-visible,
-.creation-choices button:focus-visible {
+.creation-choices button:focus-visible,
+.tool-panel button:focus-visible,
+.tool-panel input:focus-visible {
   outline: 2px solid rgba(23, 23, 20, 0.78);
   outline-offset: 3px;
+}
+
+.tool-panel {
+  position: absolute;
+  top: 58px;
+  right: 0;
+  width: min(286px, calc(100vw - 36px));
+  padding: 8px;
+  border-radius: 20px;
+  color: rgba(23, 23, 20, 0.78);
+}
+
+.tool-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin-bottom: 5px;
+}
+
+.tool-choice button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 14px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.tool-choice button[aria-pressed="true"] {
+  color: #171714;
+  background: rgba(23, 23, 20, 0.075);
+}
+
+.tool-row {
+  display: grid;
+  gap: 8px;
+  padding: 11px 10px 9px;
+  font-size: 12px;
+}
+
+.tool-row > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tool-row output {
+  color: rgba(23, 23, 20, 0.48);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-row input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: #171714;
+}
+
+.color-row {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.color-row input[type="color"] {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
 }
 
 .delete-action {

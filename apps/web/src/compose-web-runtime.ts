@@ -2,9 +2,11 @@ import { WebMCPAdapter } from "@foldthink/agent-integration/browser";
 import { consumeJoinCapability } from "@foldthink/identity/browser";
 import {
   CanvasSceneRenderer,
+  DrawingToolController,
   PointerIntentAdapter,
   SpatialWorkspaceController,
   ViewportController,
+  type DrawingToolState,
   type SpatialViewState,
 } from "@foldthink/interaction/browser";
 import { LocalWorkspaceStore } from "@foldthink/local-persistence/browser";
@@ -18,6 +20,13 @@ export type WebRuntime = Readonly<{
   runtime: WorkspaceRuntime;
   spatialState(): SpatialViewState;
   observeSpatial(listener: (state: SpatialViewState) => void): () => void;
+  drawingToolState(): DrawingToolState;
+  observeDrawingTool(listener: (state: DrawingToolState) => void): () => void;
+  selectDrawingTool(tool: "pen" | "eraser"): void;
+  setPenColor(color: string): void;
+  setPenWidth(width: number): void;
+  setMinimumOpacity(opacity: number): void;
+  setEraserWidth(width: number): void;
   createItem(kind: "notebook" | "document"): Promise<void>;
   addPage(): Promise<void>;
   turnPage(direction: -1 | 1): Promise<void>;
@@ -54,6 +63,7 @@ export async function composeWebRuntime(
   const runtime = new WorkspaceRuntime(identity.workspaceId, scenes, store);
   const viewport = new ViewportController();
   const spatial = new SpatialWorkspaceController();
+  const tools = new DrawingToolController();
   const renderer = new CanvasSceneRenderer(canvas, runtime.inspect(boardSurfaceId), viewport, spatial);
   for (const surfaceId of runtime.surfaceIds()) renderer.setSnapshot(runtime.inspect(surfaceId));
   const stopObserving = runtime.observeAll((snapshot) => {
@@ -92,8 +102,9 @@ export async function composeWebRuntime(
     renderer,
     viewport,
     spatial,
+    tools,
     onPageTurn: (direction) => void turnPage(direction).catch(() => onStatus("This page turn could not be saved")),
-    onCommitError: () => onStatus("This stroke is visible but could not be saved"),
+    onCommitError: () => onStatus("This mark could not be saved"),
   });
   const sync = new SyncClient({
     runtime,
@@ -130,6 +141,13 @@ export async function composeWebRuntime(
     runtime,
     spatialState: () => spatial.state(),
     observeSpatial: (listener) => spatial.observe(listener),
+    drawingToolState: () => tools.state(),
+    observeDrawingTool: (listener) => tools.observe(listener),
+    selectDrawingTool: (tool) => tools.select(tool),
+    setPenColor: (color) => tools.setPenColor(color),
+    setPenWidth: (width) => tools.setPenWidth(width),
+    setMinimumOpacity: (opacity) => tools.setMinimumOpacity(opacity),
+    setEraserWidth: (width) => tools.setEraserMaximumWidth(width),
     async createItem(kind): Promise<void> {
       const itemId = crypto.randomUUID();
       const coverSurfaceId = `cover:${itemId}`;

@@ -13,8 +13,8 @@ domains/agent-integration/
 |-- src/
 |   |-- public-browser.ts             # Deliberate browser-facing exports.
 |   |-- site-tool-schema.ts           # Published tool input and browser API shapes.
-|   |-- inspect-current-surface-tool.ts # Bounded semantic readout.
-|   |-- apply-surface-patch-tool.ts   # Validated command translation.
+|   |-- inspect-current-surface-tool.ts # Bounded scene, ink, and erasure readout.
+|   |-- apply-surface-patch-tool.ts   # Validated ordinary element-patch translation.
 |   `-- webmcp-adapter.ts             # Top-level registration and live page context.
 `-- tests/
     `-- webmcp-adapter.test.ts        # Progressive enhancement and one-runtime proof.

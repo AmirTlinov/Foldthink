@@ -104,7 +104,13 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     throw new ProtocolError("invalid_envelope", "The operation needs a typed intent.");
   }
   const intent = candidate.intent as CommandIntent;
-  if (intent.kind !== "commitStroke" && intent.kind !== "patchSurface" && intent.kind !== "createSurfaces") {
+  if (
+    intent.kind !== "commitStroke" &&
+    intent.kind !== "eraseInk" &&
+    intent.kind !== "undoOwnAction" &&
+    intent.kind !== "patchSurface" &&
+    intent.kind !== "createSurfaces"
+  ) {
     throw new ProtocolError("invalid_envelope", "The operation intent is unsupported.");
   }
   if (intent.kind === "createSurfaces") {
@@ -151,6 +157,15 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     if (!intent.stroke || typeof intent.stroke !== "object" || intent.stroke.kind !== "ink") {
       throw new ProtocolError("invalid_envelope", "A commitStroke intent needs one ink stroke.");
     }
+  } else if (intent.kind === "eraseInk") {
+    if (!intent.mask || typeof intent.mask !== "object" || intent.mask.kind !== "erase") {
+      throw new ProtocolError("invalid_envelope", "An eraseInk intent needs one erase mask.");
+    }
+  } else if (intent.kind === "undoOwnAction") {
+    if (typeof intent.targetOperationId !== "string" || !uuidPattern.test(intent.targetOperationId)) {
+      throw new ProtocolError("invalid_envelope", "An undo intent needs its original operation ID.");
+    }
+    validateChanges(intent.changes);
   } else {
     validateChanges(intent.changes);
   }

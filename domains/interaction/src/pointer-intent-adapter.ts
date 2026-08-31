@@ -1,6 +1,8 @@
-import type { InkStyle, WorkspaceItem } from "@foldthink/surface";
+import type { WorkspaceItem } from "@foldthink/surface";
 import type { WorkspaceRuntime } from "@foldthink/workspace";
 import type { CanvasSceneRenderer } from "./canvas-scene-renderer.js";
+import type { DrawingToolController } from "./drawing-tool-controller.js";
+import { EraseSession } from "./erase-session.js";
 import { GestureArena } from "./gesture-arena.js";
 import { InkSession, type InkSample } from "./ink-session.js";
 import type { SpatialWorkspaceController } from "./spatial-workspace-controller.js";
@@ -14,17 +16,10 @@ export type PointerAdapterOptions = Readonly<{
   renderer: CanvasSceneRenderer;
   viewport: ViewportController;
   spatial: SpatialWorkspaceController;
-  penStyle?: InkStyle;
+  tools: DrawingToolController;
   onPageTurn?: (direction: -1 | 1) => void;
   onCommitError?: (error: unknown) => void;
 }>;
-
-const defaultPenStyle: InkStyle = Object.freeze({
-  color: "#171714",
-  width: 2.4,
-  minimumOpacity: 0.22,
-  maximumOpacity: 0.96,
-});
 
 type TrackedContact = {
   start: ScreenPoint;
@@ -40,11 +35,21 @@ export class PointerIntentAdapter {
   #ink: InkSession | undefined;
   #inkPointerId: number | undefined;
   #inkSurfaceId: string | undefined;
+  #erase: EraseSession | undefined;
+  #erasePointerId: number | undefined;
+  #eraseSurfaceId: string | undefined;
   #movePointerId: number | undefined;
   #moveOffset: ScreenPoint | undefined;
   #holdTimer: ReturnType<typeof setTimeout> | undefined;
   #lastTap: Readonly<{ itemId: string; time: number }> | undefined;
   #itemPinchScale = 1;
+  #twoFingerSequence = false;
+  #twoFingerCandidate = false;
+  #undoPerformed = false;
+  #undoPending = false;
+  #undoSurfaceId: string | undefined;
+  #undoDelay: ReturnType<typeof setTimeout> | undefined;
+  #undoRepeat: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: PointerAdapterOptions) {
     this.#options = options;
@@ -68,7 +73,9 @@ export class PointerIntentAdapter {
     canvas.removeEventListener("lostpointercapture", this.#lostPointerCapture);
     canvas.removeEventListener("contextmenu", this.#contextMenu);
     this.#clearHold();
+    this.#clearUndoTimers();
     this.#cancelInk();
+    this.#cancelErase();
     this.#options.spatial.cancelMove();
     this.#arena.cancel();
   }
@@ -80,23 +87,56 @@ export class PointerIntentAdapter {
     const screen = this.#screenPoint(event);
     const spatial = this.#options.spatial.state();
     const item = spatial.mode === "board" ? this.#options.renderer.itemAtScreen(screen) : undefined;
-    const draws = event.pointerType === "pen" || (
-      event.pointerType === "mouse" && (
-        spatial.mode === "item" || (!item && this.#options.spatial.selectedItemId() === undefined)
+    const draws = spatial.mode !== "entering" && (
+      event.pointerType === "pen" || (
+        event.pointerType === "mouse" && (
+          spatial.mode === "item" || (!item && this.#options.spatial.selectedItemId() === undefined)
+        )
       )
     );
     if (draws) {
+      if (event.pointerType === "pen" && this.#contacts.size > 0) {
+        this.#clearHold();
+        this.#clearUndoTimers();
+        this.#contacts.clear();
+        this.#arena.cancel();
+        this.#twoFingerSequence = false;
+        this.#twoFingerCandidate = false;
+        this.#undoPerformed = false;
+        this.#undoSurfaceId = undefined;
+        if (this.#movePointerId !== undefined) this.#options.spatial.cancelMove();
+        this.#movePointerId = undefined;
+        this.#moveOffset = undefined;
+      }
+      this.#cancelInk();
+      this.#cancelErase();
       const target = this.#options.renderer.resolveSurfaceTarget(screen);
-      this.#inkPointerId = event.pointerId;
-      this.#inkSurfaceId = target.surfaceId;
-      this.#ink = new InkSession(
-        crypto.randomUUID(),
-        this.#options.penStyle ?? defaultPenStyle,
-        this.#sample(event, target.surfaceId),
-      );
-      this.#options.renderer.setActiveInk(this.#ink, target.surfaceId);
+      const tools = this.#options.tools.state();
+      if (tools.selected === "eraser") {
+        this.#erasePointerId = event.pointerId;
+        this.#eraseSurfaceId = target.surfaceId;
+        this.#erase = new EraseSession(
+          crypto.randomUUID(),
+          tools.eraser,
+          this.#sample(event, target.surfaceId),
+        );
+        this.#options.renderer.setActiveErase(
+          this.#erase.preview(this.#options.renderer.inkIndex(target.surfaceId)),
+          target.surfaceId,
+        );
+      } else {
+        this.#inkPointerId = event.pointerId;
+        this.#inkSurfaceId = target.surfaceId;
+        this.#ink = new InkSession(
+          crypto.randomUUID(),
+          tools.pen,
+          this.#sample(event, target.surfaceId),
+        );
+        this.#options.renderer.setActiveInk(this.#ink, target.surfaceId);
+      }
       return;
     }
+    if (event.pointerType === "touch" && (this.#ink || this.#erase)) return;
 
     const contact: TrackedContact = {
       start: screen,
@@ -109,6 +149,7 @@ export class PointerIntentAdapter {
     if (this.#contacts.size >= 2) {
       this.#clearHold();
       this.#itemPinchScale = 1;
+      if (event.pointerType === "touch" && this.#contacts.size === 2) this.#beginTwoFingerUndo();
       return;
     }
     if (item && spatial.mode === "board") {
@@ -120,9 +161,18 @@ export class PointerIntentAdapter {
   readonly #pointerMove = (event: PointerEvent): void => {
     event.preventDefault();
     if (event.pointerId === this.#inkPointerId && this.#ink && this.#inkSurfaceId) {
-      const coalesced = event.getCoalescedEvents?.() ?? [event];
-      this.#ink.append(coalesced.map((sample) => this.#sample(sample, this.#inkSurfaceId as string)));
+      this.#ink.append(this.#coalescedSamples(event, this.#inkSurfaceId));
+      const predicted = event.getPredictedEvents?.() ?? [];
+      this.#ink.predict(predicted.map((sample) => this.#sample(sample, this.#inkSurfaceId as string)));
       this.#options.renderer.setActiveInk(this.#ink, this.#inkSurfaceId);
+      return;
+    }
+    if (event.pointerId === this.#erasePointerId && this.#erase && this.#eraseSurfaceId) {
+      this.#erase.append(this.#coalescedSamples(event, this.#eraseSurfaceId));
+      this.#options.renderer.setActiveErase(
+        this.#erase.preview(this.#options.renderer.inkIndex(this.#eraseSurfaceId)),
+        this.#eraseSurfaceId,
+      );
       return;
     }
 
@@ -130,7 +180,12 @@ export class PointerIntentAdapter {
     if (!contact) return;
     const screen = this.#screenPoint(event);
     contact.current = screen;
-    if (Math.hypot(screen.x - contact.start.x, screen.y - contact.start.y) >= 5) {
+    const travel = Math.hypot(screen.x - contact.start.x, screen.y - contact.start.y);
+    if (this.#twoFingerCandidate) {
+      if (travel < 4) return;
+      this.#cancelTwoFingerCandidate();
+    }
+    if (travel >= 5) {
       contact.moved = true;
       this.#clearHold();
     }
@@ -156,6 +211,7 @@ export class PointerIntentAdapter {
     if (event.pointerId === this.#inkPointerId && this.#ink && this.#inkSurfaceId) {
       const completedInk = this.#ink;
       const surfaceId = this.#inkSurfaceId;
+      completedInk.append(this.#coalescedSamples(event, surfaceId));
       this.#ink = undefined;
       this.#inkPointerId = undefined;
       this.#inkSurfaceId = undefined;
@@ -169,10 +225,41 @@ export class PointerIntentAdapter {
       });
       return;
     }
+    if (event.pointerId === this.#erasePointerId && this.#erase && this.#eraseSurfaceId) {
+      const completedErase = this.#erase;
+      const surfaceId = this.#eraseSurfaceId;
+      completedErase.append(this.#coalescedSamples(event, surfaceId));
+      const mask = completedErase.preview(this.#options.renderer.inkIndex(surfaceId));
+      this.#erase = undefined;
+      this.#erasePointerId = undefined;
+      this.#eraseSurfaceId = undefined;
+      if (mask.affectedStrokeIds.length === 0) {
+        this.#options.renderer.setActiveErase(undefined);
+        return;
+      }
+      this.#options.renderer.setActiveErase(mask, surfaceId);
+      void this.#options.runtime.dispatch({
+        kind: "eraseInk",
+        surfaceId,
+        mask,
+      }).then(() => this.#options.renderer.setActiveErase(undefined)).catch((error: unknown) => {
+        this.#options.renderer.setActiveErase(undefined);
+        this.#options.onCommitError?.(error);
+      });
+      return;
+    }
 
     this.#clearHold();
     const contact = this.#contacts.get(event.pointerId);
-    const wasPinch = this.#contacts.size >= 2 || this.#options.spatial.state().mode === "entering";
+    const wasTwoFingerSequence = this.#twoFingerSequence;
+    if (this.#twoFingerCandidate) {
+      if (!this.#undoPerformed) this.#performUndo();
+      this.#cancelTwoFingerCandidate();
+    } else {
+      this.#clearUndoTimers();
+    }
+    const wasPinch = this.#contacts.size >= 2 || wasTwoFingerSequence ||
+      this.#options.spatial.state().mode === "entering";
     this.#contacts.delete(event.pointerId);
     this.#arena.end(event.pointerId);
     if (event.pointerId === this.#movePointerId) {
@@ -189,12 +276,18 @@ export class PointerIntentAdapter {
     if (this.#contacts.size === 0) {
       this.#options.spatial.settleTransition();
       this.#itemPinchScale = 1;
+      this.#twoFingerSequence = false;
+      this.#twoFingerCandidate = false;
+      this.#undoPerformed = false;
+      this.#undoSurfaceId = undefined;
+      this.#clearUndoTimers();
     }
   };
 
   readonly #pointerCancel = (event: PointerEvent): void => {
     this.#clearHold();
     if (event.pointerId === this.#inkPointerId) this.#cancelInk();
+    if (event.pointerId === this.#erasePointerId) this.#cancelErase();
     if (event.pointerId === this.#movePointerId) {
       this.#options.spatial.cancelMove();
       this.#movePointerId = undefined;
@@ -202,11 +295,22 @@ export class PointerIntentAdapter {
     }
     this.#contacts.delete(event.pointerId);
     this.#arena.end(event.pointerId);
-    if (this.#contacts.size === 0) this.#options.spatial.settleTransition();
+    if (this.#contacts.size === 0) {
+      this.#options.spatial.settleTransition();
+      this.#twoFingerSequence = false;
+      this.#twoFingerCandidate = false;
+      this.#undoPerformed = false;
+      this.#undoSurfaceId = undefined;
+      this.#clearUndoTimers();
+    }
   };
 
   readonly #lostPointerCapture = (event: PointerEvent): void => {
-    if (event.pointerId === this.#inkPointerId || this.#contacts.has(event.pointerId)) {
+    if (
+      event.pointerId === this.#inkPointerId ||
+      event.pointerId === this.#erasePointerId ||
+      this.#contacts.has(event.pointerId)
+    ) {
       this.#pointerCancel(event);
     }
   };
@@ -304,11 +408,58 @@ export class PointerIntentAdapter {
     this.#holdTimer = undefined;
   }
 
+  #beginTwoFingerUndo(): void {
+    if (this.#contacts.size !== 2 || this.#movePointerId !== undefined) return;
+    this.#twoFingerSequence = true;
+    this.#twoFingerCandidate = true;
+    this.#undoPerformed = false;
+    this.#undoSurfaceId = this.#options.renderer.activeSurfaceId();
+    this.#clearUndoTimers();
+    this.#undoDelay = setTimeout(() => {
+      if (!this.#twoFingerCandidate || this.#contacts.size !== 2) return;
+      this.#performUndo();
+      this.#undoRepeat = setInterval(() => {
+        if (this.#twoFingerCandidate && this.#contacts.size === 2) this.#performUndo();
+      }, 115);
+    }, 360);
+  }
+
+  #performUndo(): void {
+    const surfaceId = this.#undoSurfaceId;
+    if (!surfaceId || this.#undoPending) return;
+    this.#undoPerformed = true;
+    this.#undoPending = true;
+    void this.#options.runtime.undoOwnAction(surfaceId).catch((error: unknown) => {
+      this.#options.onCommitError?.(error);
+    }).finally(() => {
+      this.#undoPending = false;
+    });
+  }
+
+  #cancelTwoFingerCandidate(): void {
+    this.#twoFingerCandidate = false;
+    this.#clearUndoTimers();
+  }
+
+  #clearUndoTimers(): void {
+    if (this.#undoDelay) clearTimeout(this.#undoDelay);
+    if (this.#undoRepeat) clearInterval(this.#undoRepeat);
+    this.#undoDelay = undefined;
+    this.#undoRepeat = undefined;
+  }
+
   #cancelInk(): void {
     this.#ink = undefined;
     this.#inkPointerId = undefined;
     this.#inkSurfaceId = undefined;
     this.#options.renderer.setActiveInk(undefined);
+  }
+
+  #cancelErase(): void {
+    this.#erase = undefined;
+    this.#erasePointerId = undefined;
+    this.#eraseSurfaceId = undefined;
+    this.#options.renderer.setActiveErase(undefined);
   }
 
   #screenPoint(event: PointerEvent): ScreenPoint {
@@ -318,11 +469,19 @@ export class PointerIntentAdapter {
 
   #sample(event: PointerEvent, surfaceId: string): InkSample {
     const point = this.#options.renderer.mapScreenToSurface(this.#screenPoint(event), surfaceId);
+    const pressure = event.pointerType === "pen" && Number.isFinite(event.pressure)
+      ? Math.max(0, Math.min(1, event.pressure))
+      : 0.5;
     return Object.freeze({
       x: point.x,
       y: point.y,
-      pressure: event.pressure || 0.5,
+      pressure,
       time: event.timeStamp,
     });
+  }
+
+  #coalescedSamples(event: PointerEvent, surfaceId: string): readonly InkSample[] {
+    const coalesced = event.getCoalescedEvents?.() ?? [];
+    return Object.freeze([...coalesced, event].map((sample) => this.#sample(sample, surfaceId)));
   }
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SceneDocument, type WorkspaceItem } from "@foldthink/surface";
+import { SceneDocument, type EraseMask, type WorkspaceItem } from "@foldthink/surface";
 import {
   WorkspaceRuntime,
   type CommandReceipt,
@@ -131,6 +131,77 @@ test("the gateway rejects an intent that lies about its CRDT transition", async 
     /different elements/u,
   );
   assert.equal(journal.committed.size, 0);
+});
+
+test("geometric erasure and its inverse survive the committed recovery stream", async () => {
+  const localCommits: LocalCommit[] = [];
+  const runtime = new WorkspaceRuntime(actor.workspaceId, [new SceneDocument("board")], {
+    async commitLocal(commit): Promise<CommandReceipt> {
+      localCommits.push(commit);
+      return { ...commit.receipt, syncState: "queued" };
+    },
+    async commitRemote(): Promise<void> {},
+  });
+  const ink = strokeOperation().intent;
+  if (ink.kind !== "commitStroke") throw new Error("The stroke fixture is malformed.");
+  const mask: EraseMask = {
+    id: "erase-1",
+    kind: "erase",
+    version: 1,
+    points: [
+      { x: 0, y: 2, pressure: 0.2, time: 2 },
+      { x: 4, y: 2, pressure: 0.9, time: 3 },
+    ],
+    style: { minimumWidth: 12, maximumWidth: 60 },
+    affectedStrokeIds: [ink.stroke.id],
+  };
+  await runtime.dispatch({ kind: "commitStroke", surfaceId: "board", stroke: ink.stroke });
+  await runtime.dispatch({ kind: "eraseInk", surfaceId: "board", mask });
+
+  const journal = new MemoryOperationJournal();
+  const gateway = new SyncGateway(journal);
+  await gateway.submit(actor, encodeOperationEnvelope(localCommits[0]?.operation as LocalOperation));
+  await gateway.submit(actor, encodeOperationEnvelope(localCommits[1]?.operation as LocalOperation));
+  assert.deepEqual(
+    new SceneDocument("board", journal.states.get("board")).snapshot().elements.map((element) => element.id),
+    [mask.id, ink.stroke.id],
+  );
+
+  await runtime.undoOwnAction("board");
+  await gateway.submit(actor, encodeOperationEnvelope(localCommits[2]?.operation as LocalOperation));
+  const recovered = await gateway.readState(actor);
+  const board = recovered.surfaces.find((surface) => surface.surfaceId === "board");
+  assert.ok(board);
+  const decoded = Buffer.from(board.state, "base64");
+  assert.deepEqual(
+    new SceneDocument("board", decoded).snapshot().elements.map((element) => element.id),
+    [ink.stroke.id],
+  );
+});
+
+test("the gateway rejects an erase mask that names absent ink", async () => {
+  const scene = new SceneDocument("board");
+  const operationId = crypto.randomUUID();
+  const mask: EraseMask = {
+    id: "erase-orphan",
+    kind: "erase",
+    version: 1,
+    points: [{ x: 4, y: 5, pressure: 0.5, time: 1 }],
+    style: { minimumWidth: 10, maximumWidth: 40 },
+    affectedStrokeIds: ["missing-stroke"],
+  };
+  const mutation = scene.transact([{ action: "put", element: mask }], operationId);
+  const operation: LocalOperation = {
+    protocolVersion: 1,
+    operationId,
+    workspaceId: actor.workspaceId,
+    intent: { kind: "eraseInk", surfaceId: "board", mask },
+    updates: [{ surfaceId: "board", payload: mutation.update }],
+  };
+  await assert.rejects(
+    new SyncGateway(new MemoryOperationJournal()).submit(actor, encodeOperationEnvelope(operation)),
+    /only existing ink strokes/u,
+  );
 });
 
 test("the gateway validates and commits a multi-surface creation as one operation", async () => {

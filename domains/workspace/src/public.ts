@@ -7,9 +7,11 @@ export type {
   CommandIntent,
   CommitStrokeIntent,
   CreateSurfacesIntent,
+  EraseInkIntent,
   LocalOperation,
   PatchSurfaceIntent,
   SurfaceOperationUpdate,
+  UndoOwnActionIntent,
 } from "./workspace-command.js";
 export type {
   LocalCommit,

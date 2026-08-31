@@ -12,8 +12,8 @@ export async function applySurfacePatch(
   const patch = parseSurfacePatchInput(input);
   for (const change of patch.changes) {
     if (change.action === "put") {
-      if (change.element.kind === "item") {
-        throw new TypeError("Workspace items are created with their cover and page surfaces as one structural command.");
+      if (change.element.kind === "item" || change.element.kind === "erase") {
+        throw new TypeError("Structural items and geometric erasure use their dedicated semantic commands.");
       }
       validateSceneElement(change.element);
     }

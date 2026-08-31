@@ -1,13 +1,18 @@
 import type {
+  EraseMask,
   InkStroke,
   MarkdownBlock,
   SceneElement,
+  ScenePoint,
   ShapeElement,
   SurfaceSnapshot,
   WorkspaceItem,
 } from "@foldthink/surface";
 import type { InkSession } from "./ink-session.js";
-import { itemAtWorld, pageTransform, screenToPage } from "./surface-coordinate-map.js";
+import { eraserWidthAtPressure, inkOpacityAtPressure, inkWidthAtPressure } from "./ink-geometry.js";
+import { InkSpatialIndex } from "./ink-spatial-index.js";
+import { pageGridSpacing } from "./page-grid.js";
+import { itemAtWorld, pageSize, pageTransform, screenToPage } from "./surface-coordinate-map.js";
 import { SpatialWorkspaceController } from "./spatial-workspace-controller.js";
 import type { ScreenPoint, ViewportController } from "./viewport-controller.js";
 
@@ -20,6 +25,77 @@ function eased(value: number): number {
   return unit * unit * (3 - 2 * unit);
 }
 
+type BrushVertex = Readonly<{
+  point: ScenePoint;
+  leftX: number;
+  leftY: number;
+  rightX: number;
+  rightY: number;
+  radius: number;
+  opacity: number;
+  tangentAngle: number;
+}>;
+
+function visibleStrokePoints(points: readonly ScenePoint[]): readonly ScenePoint[] {
+  const visible: ScenePoint[] = [];
+  for (const point of points) {
+    const previous = visible.at(-1);
+    if (previous && previous.x === point.x && previous.y === point.y) visible[visible.length - 1] = point;
+    else visible.push(point);
+  }
+  return visible;
+}
+
+function smoothedPressure(points: readonly ScenePoint[], index: number): number {
+  const point = points[index];
+  if (!point) return 0.5;
+  const previous = points[index - 1] ?? point;
+  const next = points[index + 1] ?? point;
+  return (previous.pressure + point.pressure * 2 + next.pressure) / 4;
+}
+
+function brushVertices(stroke: InkStroke): readonly BrushVertex[] {
+  const points = visibleStrokePoints(stroke.points);
+  return points.map((point, index) => {
+    const previous = points[index - 1] ?? point;
+    const next = points[index + 1] ?? point;
+    let dx = next.x - previous.x;
+    let dy = next.y - previous.y;
+    let length = Math.hypot(dx, dy);
+    if (length <= Number.EPSILON) {
+      dx = 1;
+      dy = 0;
+      length = 1;
+    }
+    const pressure = smoothedPressure(points, index);
+    const radius = inkWidthAtPressure(stroke, pressure) / 2;
+    const normalX = -dy / length;
+    const normalY = dx / length;
+    return Object.freeze({
+      point,
+      leftX: point.x + normalX * radius,
+      leftY: point.y + normalY * radius,
+      rightX: point.x - normalX * radius,
+      rightY: point.y - normalY * radius,
+      radius,
+      opacity: inkOpacityAtPressure(stroke, pressure),
+      tangentAngle: Math.atan2(dy, dx),
+    });
+  });
+}
+
+function colorAtOpacity(color: string, opacity: number): string | undefined {
+  const shortHex = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/iu.exec(color);
+  const longHex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/iu.exec(color);
+  const channels = longHex
+    ? longHex.slice(1).map((channel) => Number.parseInt(channel, 16))
+    : shortHex
+      ? shortHex.slice(1).map((channel) => Number.parseInt(`${channel}${channel}`, 16))
+      : undefined;
+  if (!channels || channels.length !== 3) return undefined;
+  return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${opacity})`;
+}
+
 export type SurfaceTarget = Readonly<{
   surfaceId: string;
   point: ScreenPoint;
@@ -28,15 +104,27 @@ export type SurfaceTarget = Readonly<{
 export class CanvasSceneRenderer {
   readonly #canvas: HTMLCanvasElement;
   readonly #context: CanvasRenderingContext2D;
+  readonly #baseLayer: HTMLCanvasElement;
+  readonly #baseContext: CanvasRenderingContext2D;
+  readonly #inkLayer: HTMLCanvasElement;
+  readonly #inkContext: CanvasRenderingContext2D;
+  readonly #strokeLayer: HTMLCanvasElement;
+  readonly #strokeContext: CanvasRenderingContext2D;
   readonly #viewport: ViewportController;
   readonly #spatial: SpatialWorkspaceController;
+  readonly #stopViewportObservation: () => void;
+  readonly #stopSpatialObservation: () => void;
   readonly #snapshots = new Map<string, SurfaceSnapshot>();
+  readonly #inkIndexes = new Map<string, InkSpatialIndex>();
   #boardSurfaceId: string;
   #activeInk: InkSession | undefined;
   #activeInkSurfaceId: string | undefined;
+  #activeErase: EraseMask | undefined;
+  #activeEraseSurfaceId: string | undefined;
   #frame: number | undefined;
   #resizeObserver: ResizeObserver | undefined;
   #pixelRatio = 1;
+  #baseValid = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -46,37 +134,64 @@ export class CanvasSceneRenderer {
   ) {
     const context = canvas.getContext("2d", { alpha: false, desynchronized: true });
     if (!context) throw new Error("Canvas 2D is unavailable.");
+    const baseLayer = document.createElement("canvas");
+    const baseContext = baseLayer.getContext("2d", { alpha: false });
+    const inkLayer = document.createElement("canvas");
+    const inkContext = inkLayer.getContext("2d", { alpha: true });
+    const strokeLayer = document.createElement("canvas");
+    const strokeContext = strokeLayer.getContext("2d", { alpha: true });
+    if (!baseContext || !inkContext || !strokeContext) throw new Error("Canvas frame layers are unavailable.");
     this.#canvas = canvas;
     this.#context = context;
+    this.#baseLayer = baseLayer;
+    this.#baseContext = baseContext;
+    this.#inkLayer = inkLayer;
+    this.#inkContext = inkContext;
+    this.#strokeLayer = strokeLayer;
+    this.#strokeContext = strokeContext;
     this.#viewport = viewport;
     this.#spatial = spatial;
     this.#boardSurfaceId = snapshot.surfaceId;
     this.#snapshots.set(snapshot.surfaceId, snapshot);
+    this.#inkIndexes.set(snapshot.surfaceId, this.#createInkIndex(snapshot));
     this.#resize();
     if (typeof ResizeObserver === "function") {
       this.#resizeObserver = new ResizeObserver(() => this.#resize());
       this.#resizeObserver.observe(canvas, { box: "device-pixel-content-box" });
     }
-    this.#viewport.observe(() => this.requestFrame());
-    this.#spatial.observe(() => this.requestFrame());
+    this.#stopViewportObservation = this.#viewport.observe(() => this.#invalidateBase());
+    this.#stopSpatialObservation = this.#spatial.observe(() => this.#invalidateBase());
     this.requestFrame();
   }
 
   setSnapshot(snapshot: SurfaceSnapshot): void {
     this.#snapshots.set(snapshot.surfaceId, snapshot);
-    this.requestFrame();
+    this.#inkIndexes.set(snapshot.surfaceId, this.#createInkIndex(snapshot));
+    this.#invalidateBase();
   }
 
   setBoardSurface(surfaceId: string): void {
     if (!this.#snapshots.has(surfaceId)) throw new RangeError(`Unknown board surface: ${surfaceId}`);
     this.#boardSurfaceId = surfaceId;
-    this.requestFrame();
+    this.#invalidateBase();
   }
 
   setActiveInk(session: InkSession | undefined, surfaceId?: string): void {
     this.#activeInk = session;
     this.#activeInkSurfaceId = session ? surfaceId : undefined;
     this.requestFrame();
+  }
+
+  setActiveErase(mask: EraseMask | undefined, surfaceId?: string): void {
+    this.#activeErase = mask;
+    this.#activeEraseSurfaceId = mask ? surfaceId : undefined;
+    this.requestFrame();
+  }
+
+  inkIndex(surfaceId: string): InkSpatialIndex {
+    const index = this.#inkIndexes.get(surfaceId);
+    if (!index) throw new RangeError(`Unknown surface: ${surfaceId}`);
+    return index;
   }
 
   items(): readonly WorkspaceItem[] {
@@ -147,6 +262,8 @@ export class CanvasSceneRenderer {
 
   destroy(): void {
     this.#resizeObserver?.disconnect();
+    this.#stopViewportObservation();
+    this.#stopSpatialObservation();
     if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
   }
 
@@ -158,11 +275,35 @@ export class CanvasSceneRenderer {
     if (this.#canvas.width !== width || this.#canvas.height !== height) {
       this.#canvas.width = width;
       this.#canvas.height = height;
+      this.#baseValid = false;
+    }
+    if (this.#baseLayer.width !== width || this.#baseLayer.height !== height) {
+      this.#baseLayer.width = width;
+      this.#baseLayer.height = height;
+      this.#baseValid = false;
+    }
+    if (this.#inkLayer.width !== width || this.#inkLayer.height !== height) {
+      this.#inkLayer.width = width;
+      this.#inkLayer.height = height;
+    }
+    if (this.#strokeLayer.width !== width || this.#strokeLayer.height !== height) {
+      this.#strokeLayer.width = width;
+      this.#strokeLayer.height = height;
     }
     this.requestFrame();
   }
 
   #render(): void {
+    if (this.#activeInk && !this.#activeErase && this.#baseValid) {
+      this.#restoreBase();
+      this.#drawActiveInkOverlay();
+      return;
+    }
+    this.#drawCompleteFrame();
+    if (!this.#activeInk && !this.#activeErase) this.#captureBase();
+  }
+
+  #drawCompleteFrame(): void {
     const context = this.#context;
     const width = this.#cssWidth();
     const height = this.#cssHeight();
@@ -177,6 +318,76 @@ export class CanvasSceneRenderer {
     if (state.mode === "entering") this.#drawTransition(state.itemId, state.progress, width, height);
   }
 
+  #drawActiveInkOverlay(): void {
+    const ink = this.#activeInk;
+    const surfaceId = this.#activeInkSurfaceId;
+    if (!ink || !surfaceId) return;
+    const context = this.#context;
+    context.setTransform(this.#pixelRatio, 0, 0, this.#pixelRatio, 0, 0);
+    context.globalAlpha = 1;
+    context.globalCompositeOperation = "source-over";
+    const state = this.#spatial.state();
+    if (state.mode === "board") {
+      const viewport = this.#viewport.state();
+      context.save();
+      context.translate(viewport.x, viewport.y);
+      context.scale(viewport.scale, viewport.scale);
+      if (surfaceId === this.#boardSurfaceId) {
+        this.#drawInk(ink.displayStroke());
+      } else {
+        const item = this.items().find((candidate) => candidate.coverSurfaceId === surfaceId);
+        if (item) {
+          const preview = this.#spatial.movePreview();
+          const x = preview?.itemId === item.id ? preview.x : item.x;
+          const y = preview?.itemId === item.id ? preview.y : item.y;
+          context.save();
+          context.beginPath();
+          context.roundRect(x, y, item.width, item.height, 22);
+          context.clip();
+          context.translate(x, y);
+          this.#drawInk(ink.displayStroke());
+          context.restore();
+        }
+      }
+      context.restore();
+      return;
+    }
+    if (state.mode === "item" && surfaceId === this.activeSurfaceId()) {
+      const transform = pageTransform(this.#cssWidth(), this.#cssHeight());
+      context.save();
+      context.translate(transform.x, transform.y);
+      context.scale(transform.scale, transform.scale);
+      this.#drawInk(ink.displayStroke());
+      context.restore();
+    }
+  }
+
+  #invalidateBase(): void {
+    this.#baseValid = false;
+    this.requestFrame();
+  }
+
+  #captureBase(): void {
+    const context = this.#baseContext;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalAlpha = 1;
+    context.globalCompositeOperation = "copy";
+    context.drawImage(this.#canvas, 0, 0);
+    context.restore();
+    this.#baseValid = true;
+  }
+
+  #restoreBase(): void {
+    const context = this.#context;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalAlpha = 1;
+    context.globalCompositeOperation = "copy";
+    context.drawImage(this.#baseLayer, 0, 0);
+    context.restore();
+  }
+
   #drawBoard(width: number, height: number, omittedItemId?: string): void {
     const context = this.#context;
     context.fillStyle = "#e7e7e3";
@@ -186,13 +397,14 @@ export class CanvasSceneRenderer {
     context.save();
     context.translate(viewport.x, viewport.y);
     context.scale(viewport.scale, viewport.scale);
-    for (const element of this.#boardSnapshot().elements) {
-      if (element.kind === "item" && element.id !== omittedItemId) this.#drawWorkspaceItem(element, viewport.scale);
-      else this.#drawElement(element);
+    this.#drawSurfaceElements(this.#boardSnapshot());
+    for (const item of this.items()) {
+      if (item.id !== omittedItemId) this.#drawWorkspaceItem(item, viewport.scale);
     }
     if (this.#activeInk && this.#activeInkSurfaceId === this.#boardSurfaceId) {
-      this.#drawInk(this.#activeInk.stroke());
+      this.#drawInk(this.#activeInk.displayStroke());
     }
+    this.#drawActiveEraser(this.#boardSurfaceId);
     context.restore();
   }
 
@@ -220,8 +432,9 @@ export class CanvasSceneRenderer {
     const cover = this.#snapshots.get(item.coverSurfaceId);
     if (cover) this.#drawSurfaceElements(cover);
     if (this.#activeInk && this.#activeInkSurfaceId === item.coverSurfaceId) {
-      this.#drawInk(this.#activeInk.stroke());
+      this.#drawInk(this.#activeInk.displayStroke());
     }
+    this.#drawActiveEraser(item.coverSurfaceId);
     if (item.title && !cover?.elements.some((element) => element.kind === "markdown")) {
       context.fillStyle = "rgba(23, 23, 20, 0.62)";
       context.font = "600 28px ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif";
@@ -247,15 +460,18 @@ export class CanvasSceneRenderer {
       this.#drawBoard(width, height);
       return;
     }
-    this.#drawPageMaterial(0, 0, width, height, 0);
     const transform = pageTransform(width, height);
     const context = this.#context;
+    context.fillStyle = "#fffef9";
+    context.fillRect(0, 0, width, height);
     context.save();
     context.translate(transform.x, transform.y);
     context.scale(transform.scale, transform.scale);
+    this.#drawPageMaterial(0, 0, pageSize.width, pageSize.height, 0);
     const surface = this.#snapshots.get(item.pageSurfaceIds[item.activePageIndex] ?? "");
     if (surface) this.#drawSurfaceElements(surface);
-    if (this.#activeInk && this.#activeInkSurfaceId === surface?.surfaceId) this.#drawInk(this.#activeInk.stroke());
+    if (this.#activeInk && this.#activeInkSurfaceId === surface?.surfaceId) this.#drawInk(this.#activeInk.displayStroke());
+    if (surface) this.#drawActiveEraser(surface.surfaceId);
     context.restore();
   }
 
@@ -285,7 +501,12 @@ export class CanvasSceneRenderer {
     context.beginPath();
     context.roundRect(rect.x, rect.y, rect.width, rect.height, radius);
     context.clip();
-    this.#drawPageMaterial(rect.x, rect.y, rect.width, rect.height, radius);
+    const transform = pageTransform(rect.width, rect.height);
+    context.save();
+    context.translate(rect.x + transform.x, rect.y + transform.y);
+    context.scale(transform.scale, transform.scale);
+    this.#drawPageMaterial(0, 0, pageSize.width, pageSize.height, 0);
+    context.restore();
 
     const coverAlpha = 1 - Math.pow(t, 4);
     if (coverAlpha > 0.01) {
@@ -299,7 +520,6 @@ export class CanvasSceneRenderer {
     }
     if (t > 0.2) {
       const pageAlpha = eased((t - 0.2) / 0.8);
-      const transform = pageTransform(rect.width, rect.height);
       context.save();
       context.globalAlpha = pageAlpha;
       context.translate(rect.x + transform.x, rect.y + transform.y);
@@ -321,17 +541,18 @@ export class CanvasSceneRenderer {
     }
     context.fillStyle = "#fffef9";
     context.fillRect(x, y, width, height);
-    const spacing = 18.8976378;
+    const transform = context.getTransform();
+    const cssScale = Math.max(0.001, Math.hypot(transform.a, transform.b) / this.#pixelRatio);
     context.strokeStyle = "rgba(139, 171, 188, 0.22)";
-    context.lineWidth = 1;
+    context.lineWidth = 1 / cssScale;
     context.beginPath();
-    for (let lineX = x + spacing; lineX < x + width; lineX += spacing) {
-      context.moveTo(Math.round(lineX) + 0.5, y);
-      context.lineTo(Math.round(lineX) + 0.5, y + height);
+    for (let lineX = x + pageGridSpacing; lineX < x + width; lineX += pageGridSpacing) {
+      context.moveTo(lineX, y);
+      context.lineTo(lineX, y + height);
     }
-    for (let lineY = y + spacing; lineY < y + height; lineY += spacing) {
-      context.moveTo(x, Math.round(lineY) + 0.5);
-      context.lineTo(x + width, Math.round(lineY) + 0.5);
+    for (let lineY = y + pageGridSpacing; lineY < y + height; lineY += pageGridSpacing) {
+      context.moveTo(x, lineY);
+      context.lineTo(x + width, lineY);
     }
     context.stroke();
     context.restore();
@@ -354,8 +575,14 @@ export class CanvasSceneRenderer {
   }
 
   #drawSurfaceElements(snapshot: SurfaceSnapshot): void {
+    const strokes = snapshot.elements.filter((element): element is InkStroke => element.kind === "ink");
+    const masks = snapshot.elements.filter((element): element is EraseMask => element.kind === "erase");
+    if (this.#activeErase && this.#activeEraseSurfaceId === snapshot.surfaceId) masks.push(this.#activeErase);
+    this.#drawInkComposition(strokes, masks);
     for (const element of snapshot.elements) {
-      if (element.kind !== "item") this.#drawElement(element);
+      if (element.kind !== "item" && element.kind !== "ink" && element.kind !== "erase") {
+        this.#drawElement(element);
+      }
     }
   }
 
@@ -363,6 +590,8 @@ export class CanvasSceneRenderer {
     switch (element.kind) {
       case "ink":
         this.#drawInk(element);
+        return;
+      case "erase":
         return;
       case "shape":
         this.#drawShape(element);
@@ -376,36 +605,185 @@ export class CanvasSceneRenderer {
   }
 
   #drawInk(stroke: InkStroke): void {
-    const context = this.#context;
-    const points = stroke.points;
-    if (points.length === 1) {
-      const point = points[0];
-      if (!point) return;
+    this.#drawInkTo(this.#context, stroke);
+  }
+
+  #drawInkComposition(strokes: readonly InkStroke[], masks: readonly EraseMask[]): void {
+    if (strokes.length === 0) return;
+    const main = this.#context;
+    const transform = main.getTransform();
+    this.#clearLayer(this.#inkContext);
+    this.#inkContext.setTransform(transform);
+    const masksByStroke = new Map<string, EraseMask[]>();
+    for (const mask of masks) {
+      for (const strokeId of mask.affectedStrokeIds) {
+        const strokeMasks = masksByStroke.get(strokeId) ?? [];
+        strokeMasks.push(mask);
+        masksByStroke.set(strokeId, strokeMasks);
+      }
+    }
+
+    for (const stroke of strokes) {
+      const strokeMasks = masksByStroke.get(stroke.id);
+      if (!strokeMasks || strokeMasks.length === 0) {
+        this.#inkContext.setTransform(transform);
+        this.#inkContext.globalCompositeOperation = "source-over";
+        this.#drawInkTo(this.#inkContext, stroke);
+        continue;
+      }
+      this.#clearLayer(this.#strokeContext);
+      this.#strokeContext.setTransform(transform);
+      this.#strokeContext.globalCompositeOperation = "source-over";
+      this.#drawInkTo(this.#strokeContext, stroke);
+      this.#strokeContext.globalCompositeOperation = "destination-out";
+      for (const mask of strokeMasks) this.#drawEraseTo(this.#strokeContext, mask);
+      this.#inkContext.save();
+      this.#inkContext.setTransform(1, 0, 0, 1, 0, 0);
+      this.#inkContext.globalAlpha = 1;
+      this.#inkContext.globalCompositeOperation = "source-over";
+      this.#inkContext.drawImage(this.#strokeLayer, 0, 0);
+      this.#inkContext.restore();
+    }
+
+    main.save();
+    main.setTransform(1, 0, 0, 1, 0, 0);
+    main.drawImage(this.#inkLayer, 0, 0);
+    main.restore();
+  }
+
+  #clearLayer(context: CanvasRenderingContext2D): void {
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalAlpha = 1;
+    context.globalCompositeOperation = "source-over";
+    context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+    context.restore();
+  }
+
+  #drawInkTo(context: CanvasRenderingContext2D, stroke: InkStroke): void {
+    const vertices = brushVertices(stroke);
+    if (vertices.length === 1) {
+      const vertex = vertices[0];
+      if (!vertex) return;
       context.save();
-      context.globalAlpha = interpolate(stroke.style.minimumOpacity, stroke.style.maximumOpacity, point.pressure);
+      context.globalAlpha = vertex.opacity;
       context.fillStyle = stroke.style.color;
       context.beginPath();
-      context.arc(point.x, point.y, stroke.style.width / 2, 0, Math.PI * 2);
+      context.arc(vertex.point.x, vertex.point.y, vertex.radius, 0, Math.PI * 2);
       context.fill();
       context.restore();
       return;
     }
     context.save();
-    context.strokeStyle = stroke.style.color;
+    for (let index = 1; index < vertices.length; index += 1) {
+      const previous = vertices[index - 1];
+      const vertex = vertices[index];
+      if (!previous || !vertex) continue;
+      const startColor = colorAtOpacity(stroke.style.color, previous.opacity);
+      const endColor = colorAtOpacity(stroke.style.color, vertex.opacity);
+      if (startColor && endColor) {
+        const gradient = context.createLinearGradient(
+          previous.point.x,
+          previous.point.y,
+          vertex.point.x,
+          vertex.point.y,
+        );
+        gradient.addColorStop(0, startColor);
+        gradient.addColorStop(1, endColor);
+        context.globalAlpha = 1;
+        context.fillStyle = gradient;
+      } else {
+        context.globalAlpha = (previous.opacity + vertex.opacity) / 2;
+        context.fillStyle = stroke.style.color;
+      }
+      context.beginPath();
+      context.moveTo(previous.leftX, previous.leftY);
+      context.lineTo(previous.rightX, previous.rightY);
+      context.lineTo(vertex.rightX, vertex.rightY);
+      context.lineTo(vertex.leftX, vertex.leftY);
+      context.closePath();
+      context.fill();
+    }
+    const first = vertices[0];
+    const last = vertices.at(-1);
+    if (first) this.#drawInkCap(context, stroke.style.color, first, "start");
+    if (last) this.#drawInkCap(context, stroke.style.color, last, "end");
+    context.restore();
+  }
+
+  #drawInkCap(
+    context: CanvasRenderingContext2D,
+    color: string,
+    vertex: BrushVertex,
+    side: "start" | "end",
+  ): void {
+    context.globalAlpha = vertex.opacity;
+    context.fillStyle = color;
+    const startAngle = side === "start"
+      ? vertex.tangentAngle + Math.PI / 2
+      : vertex.tangentAngle - Math.PI / 2;
+    context.beginPath();
+    context.moveTo(
+      vertex.point.x + Math.cos(startAngle) * vertex.radius,
+      vertex.point.y + Math.sin(startAngle) * vertex.radius,
+    );
+    context.arc(
+      vertex.point.x,
+      vertex.point.y,
+      vertex.radius,
+      startAngle,
+      startAngle + Math.PI,
+    );
+    context.closePath();
+    context.fill();
+  }
+
+  #drawEraseTo(context: CanvasRenderingContext2D, mask: EraseMask): void {
+    const points = mask.points;
+    context.save();
+    context.strokeStyle = "#000000";
+    context.fillStyle = "#000000";
+    context.globalAlpha = 1;
     context.lineCap = "round";
     context.lineJoin = "round";
-    for (let index = 1; index < points.length; index += 1) {
-      const previous = points[index - 1];
-      const point = points[index];
-      if (!previous || !point) continue;
-      const pressure = (previous.pressure + point.pressure) / 2;
-      context.globalAlpha = interpolate(stroke.style.minimumOpacity, stroke.style.maximumOpacity, pressure);
-      context.lineWidth = stroke.style.width * interpolate(0.72, 1.18, pressure);
-      context.beginPath();
-      context.moveTo(previous.x, previous.y);
-      context.lineTo(point.x, point.y);
-      context.stroke();
+    if (points.length === 1) {
+      const point = points[0];
+      if (point) {
+        context.beginPath();
+        context.arc(point.x, point.y, eraserWidthAtPressure(mask.style, point.pressure) / 2, 0, Math.PI * 2);
+        context.fill();
+      }
+    } else {
+      for (let index = 1; index < points.length; index += 1) {
+        const previous = points[index - 1];
+        const point = points[index];
+        if (!previous || !point) continue;
+        context.lineWidth = eraserWidthAtPressure(mask.style, (previous.pressure + point.pressure) / 2);
+        context.beginPath();
+        context.moveTo(previous.x, previous.y);
+        context.lineTo(point.x, point.y);
+        context.stroke();
+      }
     }
+    context.restore();
+  }
+
+  #drawActiveEraser(surfaceId: string): void {
+    const mask = this.#activeEraseSurfaceId === surfaceId ? this.#activeErase : undefined;
+    const point = mask?.points.at(-1);
+    if (!mask || !point) return;
+    const context = this.#context;
+    const transform = context.getTransform();
+    const cssScale = Math.max(0.001, Math.hypot(transform.a, transform.b) / this.#pixelRatio);
+    context.save();
+    context.globalAlpha = 0.72;
+    context.fillStyle = "rgba(255, 255, 252, 0.72)";
+    context.strokeStyle = "rgba(23, 23, 20, 0.62)";
+    context.lineWidth = 1.25 / cssScale;
+    context.beginPath();
+    context.arc(point.x, point.y, eraserWidthAtPressure(mask.style, point.pressure) / 2, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
     context.restore();
   }
 
@@ -456,6 +834,12 @@ export class CanvasSceneRenderer {
     const snapshot = this.#snapshots.get(this.#boardSurfaceId);
     if (!snapshot) throw new Error("The board surface is unavailable.");
     return snapshot;
+  }
+
+  #createInkIndex(snapshot: SurfaceSnapshot): InkSpatialIndex {
+    return new InkSpatialIndex(
+      snapshot.elements.filter((element): element is InkStroke => element.kind === "ink"),
+    );
   }
 
   #cssWidth(): number {

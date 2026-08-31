@@ -223,6 +223,6 @@ test("the generic patch tool cannot bypass atomic workspace-item creation", asyn
         stackOrder: 0,
       },
     }],
-  }), /one structural command/u);
+  }), /dedicated semantic commands/u);
   assert.equal(workspace.inspect("board").elements.length, 0);
 });

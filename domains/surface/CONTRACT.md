@@ -65,6 +65,8 @@ Implemented by [scene-document.test.ts](tests/scene-document.test.ts).
 
 - Property tests reorder and duplicate updates and obtain an equal semantic scene.
 - Snapshot plus later updates reconstructs the exact surface state.
+- An erase mask survives state reconstruction, and deleting that mask restores the
+  unchanged stroke geometry.
 - Delete and erase remain absent after stale-client reconnect.
 - Moving and scaling a notebook keeps cover ink attached to the cover.
 - Camera and window resize never change serialized surface bytes.

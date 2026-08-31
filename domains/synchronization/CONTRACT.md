@@ -131,3 +131,6 @@ proved by [sync-client.test.ts](tests/sync-client.test.ts).
   leaves one identical committed receipt.
 - A rejected update is absent after repair and cannot be resurrected by later
   dependent outbox replay.
+- A geometric erase mask and the later inverse deletion receive ordered committed
+  revisions and reconstruct the original visible stroke.
+- An erase mask naming absent or non-ink content is rejected before persistence.

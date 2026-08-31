@@ -6,6 +6,8 @@ export {
 export type {
   InkStroke,
   InkStyle,
+  EraseMask,
+  EraserStyle,
   MarkdownBlock,
   SceneChange,
   SceneElement,

@@ -60,6 +60,40 @@ test("a linked device receives one durable stroke and keeps it after reload", as
       () => linkedCanvas.evaluate((element: HTMLCanvasElement) => element.toDataURL()),
       { timeout: 15_000 },
     ).toBe(shared);
+
+    await page.getByRole("button", { name: "Drawing tools" }).click();
+    await page.getByRole("button", { name: "Eraser", exact: true }).click();
+    await page.getByRole("button", { name: "Drawing tools" }).click();
+    await page.mouse.move(bounds.x + 190, bounds.y + 80);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + 190, bounds.y + 260, { steps: 14 });
+    await page.mouse.up();
+    await expect(page.getByText("Shared")).toBeVisible({ timeout: 15_000 });
+    await expect.poll(
+      () => linkedCanvas.evaluate((element: HTMLCanvasElement) => element.toDataURL()),
+      { timeout: 15_000 },
+    ).not.toBe(shared);
+
+    const devtools = await page.context().newCDPSession(page);
+    await devtools.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        { id: 31, x: bounds.x + 700, y: bounds.y + 600 },
+        { id: 32, x: bounds.x + 770, y: bounds.y + 600 },
+      ],
+    });
+    await page.waitForTimeout(40);
+    await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(
+      () => linkedCanvas.evaluate((element: HTMLCanvasElement) => element.toDataURL()),
+      { timeout: 15_000 },
+    ).toBe(shared);
+    await linkedPage.reload();
+    await expect(linkedPage.getByText("Shared")).toBeVisible({ timeout: 15_000 });
+    await expect.poll(
+      () => linkedCanvas.evaluate((element: HTMLCanvasElement) => element.toDataURL()),
+      { timeout: 15_000 },
+    ).toBe(shared);
   } finally {
     await linkedContext.close();
   }

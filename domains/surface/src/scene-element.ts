@@ -20,6 +20,20 @@ export type InkStroke = Readonly<{
   style: InkStyle;
 }>;
 
+export type EraserStyle = Readonly<{
+  minimumWidth: number;
+  maximumWidth: number;
+}>;
+
+export type EraseMask = Readonly<{
+  id: string;
+  kind: "erase";
+  version: number;
+  points: readonly ScenePoint[];
+  style: EraserStyle;
+  affectedStrokeIds: readonly string[];
+}>;
+
 export type ShapeElement = Readonly<{
   id: string;
   kind: "shape";
@@ -64,7 +78,7 @@ export type WorkspaceItem = Readonly<{
   stackOrder: number;
 }>;
 
-export type SceneElement = InkStroke | ShapeElement | MarkdownBlock | WorkspaceItem;
+export type SceneElement = InkStroke | EraseMask | ShapeElement | MarkdownBlock | WorkspaceItem;
 
 export type SceneChange =
   | Readonly<{
@@ -112,6 +126,29 @@ export function validateSceneElement(element: SceneElement): void {
       for (const point of element.points) {
         if (!finite(point.x) || !finite(point.y) || !finite(point.time) || !unit(point.pressure)) {
           throw new SceneValidationError("Ink contains an invalid point.");
+        }
+      }
+      return;
+    }
+    case "erase": {
+      if (
+        element.points.length === 0 ||
+        element.points.length > 100_000 ||
+        !finite(element.style.minimumWidth) ||
+        !finite(element.style.maximumWidth) ||
+        element.style.minimumWidth <= 0 ||
+        element.style.maximumWidth > 400 ||
+        element.style.minimumWidth > element.style.maximumWidth ||
+        element.affectedStrokeIds.length === 0 ||
+        element.affectedStrokeIds.length > 10_000 ||
+        new Set(element.affectedStrokeIds).size !== element.affectedStrokeIds.length ||
+        element.affectedStrokeIds.some((strokeId) => strokeId.length === 0 || strokeId.length > 160)
+      ) {
+        throw new SceneValidationError("An erase mask needs bounded geometry and affected strokes.");
+      }
+      for (const point of element.points) {
+        if (!finite(point.x) || !finite(point.y) || !finite(point.time) || !unit(point.pressure)) {
+          throw new SceneValidationError("An erase mask contains an invalid point.");
         }
       }
       return;

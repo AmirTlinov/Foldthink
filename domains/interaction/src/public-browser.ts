@@ -1,6 +1,12 @@
 export { CanvasSceneRenderer } from "./canvas-scene-renderer.js";
 export { GestureArena } from "./gesture-arena.js";
 export type { GestureUpdate } from "./gesture-arena.js";
+export { DrawingToolController } from "./drawing-tool-controller.js";
+export type { DrawingToolState } from "./drawing-tool-controller.js";
+export { EraseSession } from "./erase-session.js";
+export { eraserWidthAtPressure, inkOpacityAtPressure, inkWidthAtPressure } from "./ink-geometry.js";
+export { InkSpatialIndex } from "./ink-spatial-index.js";
+export type { EraseGeometry } from "./ink-spatial-index.js";
 export { InkSession } from "./ink-session.js";
 export type { InkSample } from "./ink-session.js";
 export { PointerIntentAdapter } from "./pointer-intent-adapter.js";

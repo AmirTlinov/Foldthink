@@ -22,6 +22,7 @@ export class InkSession {
   readonly #style: InkStyle;
   readonly #strokeId: string;
   readonly #points: ScenePoint[] = [];
+  #predicted: readonly ScenePoint[] = Object.freeze([]);
 
   constructor(strokeId: string, style: InkStyle, firstSample: InkSample) {
     this.#strokeId = strokeId;
@@ -30,13 +31,25 @@ export class InkSession {
   }
 
   append(samples: readonly InkSample[]): void {
+    this.#predicted = Object.freeze([]);
     for (const sample of samples) {
       const point = normalizedSample(sample);
       const previous = this.#points.at(-1);
-      if (!previous || point.time >= previous.time) {
+      if (
+        !previous ||
+        (point.time >= previous.time &&
+          (point.time !== previous.time || point.x !== previous.x || point.y !== previous.y))
+      ) {
         this.#points.push(point);
       }
     }
+  }
+
+  predict(samples: readonly InkSample[]): void {
+    const lastActual = this.#points.at(-1);
+    this.#predicted = Object.freeze(samples
+      .map(normalizedSample)
+      .filter((point) => !lastActual || point.time >= lastActual.time));
   }
 
   stroke(): InkStroke {
@@ -46,6 +59,13 @@ export class InkSession {
       version: 1,
       points: Object.freeze([...this.#points]),
       style: this.#style,
+    });
+  }
+
+  displayStroke(): InkStroke {
+    return Object.freeze({
+      ...this.stroke(),
+      points: Object.freeze([...this.#points, ...this.#predicted]),
     });
   }
 }
