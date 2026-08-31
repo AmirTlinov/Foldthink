@@ -13,14 +13,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8787",
-      "/sync": { target: "ws://localhost:8787", ws: true },
+      "/api": "http://127.0.0.1:8787",
+      "/sync": { target: "ws://127.0.0.1:8787", ws: true },
     },
   },
   preview: {
     proxy: {
-      "/api": "http://localhost:8787",
-      "/sync": { target: "ws://localhost:8787", ws: true },
+      "/api": "http://127.0.0.1:8787",
+      "/sync": { target: "ws://127.0.0.1:8787", ws: true },
     },
   },
   build: {
