@@ -5,11 +5,13 @@
 Foldthink is the public home for a notebook that people and agents can see,
 draw on, and change together.
 
-The executable surface opens without registration, keeps Pointer and Pencil input
-outside React's render path, and commits each completed stroke atomically to
-IndexedDB. When a Foldthink server is available, the same outbox is acknowledged
-by PostgreSQL and delivered to linked browsers. Page-local WebMCP tools inspect and
-patch that exact runtime rather than a second agent-only model.
+The executable surface opens without registration. A person can draw on the
+infinite board, create notebooks or documents, write on their covers, move and
+stack them, open one continuously, and turn or add pages. Pointer and Pencil input
+stay outside React's render path, while every completed action is committed
+atomically to IndexedDB. When a Foldthink server is available, the same outbox is
+acknowledged by PostgreSQL and delivered to linked browsers. Page-local WebMCP
+tools inspect and patch that exact runtime rather than a second agent-only model.
 
 ## Run locally
 

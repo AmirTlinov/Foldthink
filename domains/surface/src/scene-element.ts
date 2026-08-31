@@ -46,7 +46,25 @@ export type MarkdownBlock = Readonly<{
   fontSize: number;
 }>;
 
-export type SceneElement = InkStroke | ShapeElement | MarkdownBlock;
+export type WorkspaceItem = Readonly<{
+  id: string;
+  kind: "item";
+  version: number;
+  itemKind: "notebook" | "document";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z: number;
+  title?: string;
+  coverSurfaceId: string;
+  pageSurfaceIds: readonly string[];
+  activePageIndex: number;
+  stackId?: string;
+  stackOrder: number;
+}>;
+
+export type SceneElement = InkStroke | ShapeElement | MarkdownBlock | WorkspaceItem;
 
 export type SceneChange =
   | Readonly<{
@@ -124,6 +142,35 @@ export function validateSceneElement(element: SceneElement): void {
         element.source.length > 100_000
       ) {
         throw new SceneValidationError("Markdown block is outside its supported range.");
+      }
+      return;
+    case "item":
+      if (
+        !finite(element.x) ||
+        !finite(element.y) ||
+        !finite(element.width) ||
+        !finite(element.height) ||
+        element.width < 120 ||
+        element.width > 20_000 ||
+        element.height < 120 ||
+        element.height > 20_000 ||
+        !Number.isInteger(element.z) ||
+        !Number.isInteger(element.stackOrder) ||
+        element.stackOrder < 0 ||
+        !Number.isInteger(element.activePageIndex) ||
+        element.pageSurfaceIds.length === 0 ||
+        element.pageSurfaceIds.length > 1_000 ||
+        element.activePageIndex < 0 ||
+        element.activePageIndex >= element.pageSurfaceIds.length ||
+        element.coverSurfaceId.length === 0 ||
+        element.coverSurfaceId.length > 160 ||
+        element.pageSurfaceIds.some((surfaceId) => surfaceId.length === 0 || surfaceId.length > 160) ||
+        new Set(element.pageSurfaceIds).size !== element.pageSurfaceIds.length ||
+        element.pageSurfaceIds.includes(element.coverSurfaceId) ||
+        (element.title?.length ?? 0) > 240 ||
+        (element.stackId !== undefined && (element.stackId.length === 0 || element.stackId.length > 160))
+      ) {
+        throw new SceneValidationError("Workspace item geometry or surface references are outside their supported range.");
       }
   }
 }

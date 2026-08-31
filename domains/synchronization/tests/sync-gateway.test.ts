@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SceneDocument } from "@foldthink/surface";
-import type { LocalOperation } from "@foldthink/workspace";
+import { SceneDocument, type WorkspaceItem } from "@foldthink/surface";
+import {
+  WorkspaceRuntime,
+  type CommandReceipt,
+  type LocalCommit,
+  type LocalOperation,
+} from "@foldthink/workspace";
 import type {
   CommittedOperation,
   WorkspaceState,
@@ -169,6 +174,92 @@ test("the gateway validates and commits a multi-surface creation as one operatio
   assert.deepEqual(receipt.receipt.surfaces.map((surface) => surface.surfaceId), ["cover-one", "page-one"]);
   assert.equal(journal.committed.size, 1);
   assert.equal(journal.states.size, 2);
+});
+
+test("the gateway commits a board item and its empty child surfaces atomically", async () => {
+  let localCommit: LocalCommit | undefined;
+  const runtime = new WorkspaceRuntime(actor.workspaceId, [new SceneDocument("board")], {
+    async commitLocal(commit): Promise<CommandReceipt> {
+      localCommit = commit;
+      return { ...commit.receipt, syncState: "queued" };
+    },
+    async commitRemote(): Promise<void> {},
+  });
+  const notebook: WorkspaceItem = {
+    id: "notebook-one",
+    kind: "item",
+    version: 1,
+    itemKind: "notebook",
+    x: 100,
+    y: 120,
+    width: 360,
+    height: 504,
+    z: 1,
+    coverSurfaceId: "cover:notebook-one",
+    pageSurfaceIds: ["page:notebook-one:1"],
+    activePageIndex: 0,
+    stackOrder: 0,
+  };
+  await runtime.dispatch({
+    kind: "createSurfaces",
+    patches: [{ surfaceId: "board", changes: [{ action: "put", element: notebook }] }],
+    surfaces: [
+      { surfaceId: notebook.coverSurfaceId, changes: [] },
+      { surfaceId: notebook.pageSurfaceIds[0] as string, changes: [] },
+    ],
+  });
+  assert.ok(localCommit);
+
+  const journal = new MemoryOperationJournal();
+  const committed = await new SyncGateway(journal).submit(
+    actor,
+    encodeOperationEnvelope(localCommit.operation),
+  );
+
+  assert.deepEqual(committed.receipt.changedIds, [notebook.id]);
+  assert.deepEqual(
+    committed.receipt.surfaces.map((surface) => surface.surfaceId),
+    ["board", "cover:notebook-one", "page:notebook-one:1"],
+  );
+  assert.equal(journal.states.size, 3);
+  assert.equal(new SceneDocument("board", journal.states.get("board")).snapshot().elements[0]?.id, notebook.id);
+});
+
+test("the gateway rejects an orphan workspace item", async () => {
+  const board = new SceneDocument("board");
+  const orphan: WorkspaceItem = {
+    id: "orphan-item",
+    kind: "item",
+    version: 1,
+    itemKind: "notebook",
+    x: 0,
+    y: 0,
+    width: 360,
+    height: 504,
+    z: 1,
+    coverSurfaceId: "missing-cover",
+    pageSurfaceIds: ["missing-page"],
+    activePageIndex: 0,
+    stackOrder: 0,
+  };
+  const operationId = crypto.randomUUID();
+  const mutation = board.transact([{ action: "put", element: orphan }], operationId);
+  const operation: LocalOperation = {
+    protocolVersion: 1,
+    operationId,
+    workspaceId: actor.workspaceId,
+    intent: {
+      kind: "patchSurface",
+      surfaceId: "board",
+      changes: [{ action: "put", element: orphan }],
+    },
+    updates: [{ surfaceId: "board", payload: mutation.update }],
+  };
+
+  await assert.rejects(
+    new SyncGateway(new MemoryOperationJournal()).submit(actor, encodeOperationEnvelope(operation)),
+    /created with its cover and pages/u,
+  );
 });
 
 test("a stale edit cannot resurrect an element deleted on the server", async () => {

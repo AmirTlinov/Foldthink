@@ -9,6 +9,7 @@ tests/
 |-- AGENTS.md    # Current cross-domain proof map.
 `-- journeys/
     |-- first-stroke-offline-reload.test.ts # PWA, canvas, and IndexedDB journey.
+    |-- spatial-notebook-workspace.test.ts # Item, cover, page, stack, and deletion journey.
     |-- webmcp-shared-runtime.test.ts        # Agent patch and visible-page journey.
     `-- two-device-sync.test.ts              # Anonymous link, live delivery, and reload journey.
 ```

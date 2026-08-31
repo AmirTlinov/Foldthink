@@ -16,9 +16,9 @@ export type OperationEnvelope = Readonly<{
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const idPattern = /^[A-Za-z0-9._:-]{1,160}$/u;
 
-function validateChanges(changes: unknown): void {
-  if (!Array.isArray(changes) || changes.length === 0 || changes.length > 64) {
-    throw new ProtocolError("invalid_envelope", "A surface change set needs between one and 64 changes.");
+function validateChanges(changes: unknown, allowEmpty = false): void {
+  if (!Array.isArray(changes) || (!allowEmpty && changes.length === 0) || changes.length > 64) {
+    throw new ProtocolError("invalid_envelope", `A surface change set needs between ${allowEmpty ? "zero" : "one"} and 64 changes.`);
   }
   for (const change of changes) {
     if (!change || typeof change !== "object") {
@@ -111,6 +111,15 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     if (!Array.isArray(intent.surfaces) || intent.surfaces.length === 0 || intent.surfaces.length > 16) {
       throw new ProtocolError("invalid_envelope", "A createSurfaces intent needs between one and 16 surfaces.");
     }
+    if (
+      intent.patches !== undefined &&
+      (!Array.isArray(intent.patches) || intent.patches.length > 15)
+    ) {
+      throw new ProtocolError("invalid_envelope", "Surface creation accepts at most 15 existing-surface patches.");
+    }
+    if (intent.surfaces.length + (intent.patches?.length ?? 0) > 16) {
+      throw new ProtocolError("invalid_envelope", "One operation may touch at most 16 surfaces.");
+    }
     const surfaceIds = new Set<string>();
     for (const surface of intent.surfaces) {
       if (!surface || typeof surface !== "object" || typeof surface.surfaceId !== "string" || !idPattern.test(surface.surfaceId)) {
@@ -120,7 +129,18 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
         throw new ProtocolError("invalid_envelope", "A createSurfaces intent cannot repeat a surface.");
       }
       surfaceIds.add(surface.surfaceId);
-      validateChanges(surface.changes);
+      validateChanges(surface.changes, true);
+    }
+    const patchIds = new Set<string>();
+    for (const patch of intent.patches ?? []) {
+      if (!patch || typeof patch !== "object" || typeof patch.surfaceId !== "string" || !idPattern.test(patch.surfaceId)) {
+        throw new ProtocolError("invalid_envelope", "A patched surface needs a valid ID.");
+      }
+      if (surfaceIds.has(patch.surfaceId) || patchIds.has(patch.surfaceId)) {
+        throw new ProtocolError("invalid_envelope", "Surface creation cannot repeat a patched or created surface.");
+      }
+      patchIds.add(patch.surfaceId);
+      validateChanges(patch.changes);
     }
   } else if (
     typeof intent.surfaceId !== "string" ||
@@ -156,7 +176,10 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     return Object.freeze({ surfaceId: update.surfaceId, payload });
   });
   if (intent.kind === "createSurfaces") {
-    const declared = [...intent.surfaces.map((surface) => surface.surfaceId)].sort();
+    const declared = [
+      ...(intent.patches ?? []).map((surface) => surface.surfaceId),
+      ...intent.surfaces.map((surface) => surface.surfaceId),
+    ].sort();
     const updated = [...updates.map((update) => update.surfaceId)].sort();
     if (new Set(updated).size !== updated.length || JSON.stringify(declared) !== JSON.stringify(updated)) {
       throw new ProtocolError("invalid_envelope", "Created surfaces and updates must match exactly.");

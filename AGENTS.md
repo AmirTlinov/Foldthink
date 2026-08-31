@@ -64,10 +64,10 @@ with an identified owner, a contract it fulfills, and a proof in the same change
 The repository has no generic `core`, `shared`, `common`, `utils`, `helpers`,
 `models`, or `services` holding areas.
 
-The local thought loop, anonymous identity, durable synchronization, WebMCP, and
-both composition roots are executable. Rich spatial items, professional erasing,
-documents, assets, and production recovery remain contract-led future slices. Run
-every active proof with:
+The local thought loop, anonymous identity, durable synchronization, WebMCP,
+spatial notebooks, and both composition roots are executable. Professional
+erasing, rich documents, assets, and production recovery remain contract-led
+future slices. Run every active proof with:
 
 ```sh
 pnpm verify

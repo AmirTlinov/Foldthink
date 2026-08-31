@@ -37,6 +37,7 @@ export class WorkspaceRuntime {
   readonly #commitSink: WorkspaceCommitSink;
   readonly #invocations = new Map<string, Promise<CommandReceipt>>();
   readonly #listeners = new Map<string, Set<(snapshot: SurfaceSnapshot) => void>>();
+  readonly #allListeners = new Set<(snapshot: SurfaceSnapshot) => void>();
 
   constructor(
     workspaceId: string,
@@ -82,6 +83,11 @@ export class WorkspaceRuntime {
     };
   }
 
+  observeAll(listener: (snapshot: SurfaceSnapshot) => void): () => void {
+    this.#allListeners.add(listener);
+    return () => this.#allListeners.delete(listener);
+  }
+
   dispatch(intent: CommandIntent, invocationKey?: string): Promise<CommandReceipt> {
     if (invocationKey) {
       const existing = this.#invocations.get(invocationKey);
@@ -125,18 +131,21 @@ export class WorkspaceRuntime {
     });
 
     const queuedReceipt = await this.#commitSink.commitLocal(commit);
+    const snapshots: SurfaceSnapshot[] = [];
     for (const surface of staged) {
-      let snapshot: SurfaceSnapshot;
       if (surface.created) {
         this.#surfaces.set(surface.surfaceId, surface.document);
-        snapshot = surface.document.snapshot();
+        snapshots.push(surface.document.snapshot());
       } else {
         const live = this.surface(surface.surfaceId);
         live.applyUpdate(surface.update, operationId);
-        snapshot = live.snapshot();
+        snapshots.push(live.snapshot());
       }
-      this.#publish(snapshot);
     }
+    // Install every touched document before the first observer can read the
+    // runtime. A notebook manifest, cover, and first page are one transition,
+    // rather than three briefly inconsistent frames.
+    for (const snapshot of snapshots) this.#publish(snapshot);
     return queuedReceipt;
   }
 
@@ -228,20 +237,45 @@ export class WorkspaceRuntime {
         throw new TypeError("One command creates between one and 16 surfaces.");
       }
       const ids = intent.surfaces.map((surface) => surface.surfaceId);
-      if (new Set(ids).size !== ids.length || ids.some((surfaceId) => surfaces.has(surfaceId))) {
+      const patches = intent.patches ?? [];
+      if (ids.length + patches.length > 16) {
+        throw new TypeError("One command may touch at most 16 surfaces.");
+      }
+      const patchIds = patches.map((surface) => surface.surfaceId);
+      if (
+        new Set(ids).size !== ids.length ||
+        new Set(patchIds).size !== patchIds.length ||
+        ids.some((surfaceId) => surfaces.has(surfaceId)) ||
+        patchIds.some((surfaceId) => !surfaces.has(surfaceId) || ids.includes(surfaceId))
+      ) {
         throw new RangeError("Every created surface needs one new ID.");
       }
-      return Object.freeze(intent.surfaces.map((surface) => {
-        const document = new SceneDocument(surface.surfaceId);
+      const stagedPatches = patches.map((surface): StagedSurface => {
+        const document = surfaces.get(surface.surfaceId)?.fork();
+        if (!document) throw new RangeError(`Unknown surface: ${surface.surfaceId}`);
         const mutation = document.transact(surface.changes, operationId);
         return Object.freeze({
           surfaceId: surface.surfaceId,
-          created: true,
+          created: false,
           document,
           update: mutation.update,
           changedIds: mutation.changedIds,
         });
-      }));
+      });
+      const stagedCreations = intent.surfaces.map((surface): StagedSurface => {
+        const document = new SceneDocument(surface.surfaceId);
+        const mutation = surface.changes.length > 0
+          ? document.transact(surface.changes, operationId)
+          : undefined;
+        return Object.freeze({
+          surfaceId: surface.surfaceId,
+          created: true,
+          document,
+          update: mutation?.update ?? document.encodeState(),
+          changedIds: mutation?.changedIds ?? Object.freeze([]),
+        });
+      });
+      return Object.freeze([...stagedPatches, ...stagedCreations]);
     }
 
     const live = surfaces.get(intent.surfaceId);
@@ -263,5 +297,6 @@ export class WorkspaceRuntime {
   #publish(snapshot: SurfaceSnapshot): void {
     this.#commitSink.publishSnapshot?.(snapshot);
     for (const listener of this.#listeners.get(snapshot.surfaceId) ?? []) listener(snapshot);
+    for (const listener of this.#allListeners) listener(snapshot);
   }
 }

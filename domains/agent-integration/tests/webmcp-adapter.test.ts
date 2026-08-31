@@ -180,3 +180,49 @@ test("a viewer can inspect but cannot dispatch an agent mutation", async () => {
   assert.equal(workspace.inspect("board").elements.length, 0);
   assert.ok(await inspect.execute({}));
 });
+
+test("the generic patch tool cannot bypass atomic workspace-item creation", async () => {
+  const workspace = runtime();
+  const tools = new Map<string, SiteToolDefinition>();
+  const adapter = new WebMCPAdapter(
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => true,
+      committedRevision: () => undefined,
+      waitForCommittedReceipt: async () => undefined,
+    }),
+    {
+      modelContext: {
+        registerTool(tool): void {
+          tools.set(tool.name, tool);
+        },
+      },
+    } as WebMcpDocument,
+  );
+  await adapter.register();
+  const patch = tools.get("patch_surface");
+  if (!patch) throw new Error("patch_surface was not registered.");
+
+  await assert.rejects(patch.execute({
+    changes: [{
+      action: "put",
+      element: {
+        id: "orphan-item",
+        kind: "item",
+        version: 1,
+        itemKind: "notebook",
+        x: 0,
+        y: 0,
+        width: 360,
+        height: 504,
+        z: 1,
+        coverSurfaceId: "missing-cover",
+        pageSurfaceIds: ["missing-page"],
+        activePageIndex: 0,
+        stackOrder: 0,
+      },
+    }],
+  }), /one structural command/u);
+  assert.equal(workspace.inspect("board").elements.length, 0);
+});

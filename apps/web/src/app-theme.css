@@ -41,6 +41,74 @@ body {
   -webkit-touch-callout: none;
 }
 
+.surface-actions {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top));
+  left: max(18px, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.round-action,
+.creation-choices {
+  border: 1px solid rgba(23, 23, 20, 0.07);
+  background: rgba(248, 248, 244, 0.9);
+  box-shadow: 0 10px 30px rgba(23, 23, 20, 0.1);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.round-action {
+  width: 48px;
+  height: 48px;
+  padding: 13px;
+  border-radius: 50%;
+  color: #171714;
+}
+
+.round-action svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.round-action:focus-visible,
+.creation-choices button:focus-visible {
+  outline: 2px solid rgba(23, 23, 20, 0.78);
+  outline-offset: 3px;
+}
+
+.delete-action {
+  color: #8d2e27;
+}
+
+.creation-choices {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 18px;
+}
+
+.creation-choices button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  color: rgba(23, 23, 20, 0.78);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.creation-choices button:hover {
+  background: rgba(23, 23, 20, 0.055);
+}
+
 .surface-status {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));

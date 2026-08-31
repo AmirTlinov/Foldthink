@@ -11,6 +11,7 @@ export type {
   SceneElement,
   ScenePoint,
   ShapeElement,
+  WorkspaceItem,
 } from "./scene-element.js";
 export { inspectSurfaceTransition, SceneDocument } from "./scene-document.js";
 export type {

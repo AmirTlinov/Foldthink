@@ -14,6 +14,10 @@ export type PatchSurfaceIntent = Readonly<{
 
 export type CreateSurfacesIntent = Readonly<{
   kind: "createSurfaces";
+  patches?: readonly Readonly<{
+    surfaceId: string;
+    changes: readonly SceneChange[];
+  }>[];
   surfaces: readonly Readonly<{
     surfaceId: string;
     changes: readonly SceneChange[];

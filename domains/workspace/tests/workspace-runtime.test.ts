@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SceneDocument, type InkStroke } from "@foldthink/surface";
+import { SceneDocument, type InkStroke, type WorkspaceItem } from "@foldthink/surface";
 import {
   WorkspaceRuntime,
   type CommandReceipt,
@@ -85,6 +85,48 @@ test("surface creation crosses one local durability boundary", async () => {
   assert.deepEqual(runtime.surfaceIds(), ["board", "notebook-cover", "notebook-page-1"]);
   assert.equal(runtime.inspect("notebook-cover").elements[0]?.id, "cover-mark");
   assert.equal(sink.commits[0]?.surfaceStates.length, 2);
+});
+
+test("a notebook manifest, cover, and first page become readable together", async () => {
+  const sink = new MemorySink();
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], sink);
+  const notebook: WorkspaceItem = {
+    id: "notebook-one",
+    kind: "item",
+    version: 1,
+    itemKind: "notebook",
+    x: 100,
+    y: 120,
+    width: 360,
+    height: 504,
+    z: 1,
+    coverSurfaceId: "cover:notebook-one",
+    pageSurfaceIds: ["page:notebook-one:1"],
+    activePageIndex: 0,
+    stackOrder: 0,
+  };
+  const observedRegistries: string[][] = [];
+  runtime.observeAll(() => observedRegistries.push([...runtime.surfaceIds()]));
+
+  const receipt = await runtime.dispatch({
+    kind: "createSurfaces",
+    patches: [{
+      surfaceId: "board",
+      changes: [{ action: "put", element: notebook }],
+    }],
+    surfaces: [
+      { surfaceId: notebook.coverSurfaceId, changes: [] },
+      { surfaceId: notebook.pageSurfaceIds[0] as string, changes: [] },
+    ],
+  });
+
+  assert.deepEqual(receipt.changedIds, [notebook.id]);
+  assert.equal(sink.commits.length, 1);
+  assert.deepEqual(runtime.surfaceIds(), ["board", "cover:notebook-one", "page:notebook-one:1"]);
+  assert.equal(runtime.inspect("board").elements[0]?.id, notebook.id);
+  assert.equal(runtime.inspect(notebook.coverSurfaceId).elements.length, 0);
+  assert.equal(runtime.inspect(notebook.pageSurfaceIds[0] as string).elements.length, 0);
+  assert.deepEqual(observedRegistries[0], ["board", "cover:notebook-one", "page:notebook-one:1"]);
 });
 
 test("failed surface creation publishes none of its surfaces", async () => {

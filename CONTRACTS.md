@@ -71,7 +71,7 @@ ownership of the underlying state.
 |---|---|---|---|
 | Workspace | `WorkspaceRuntime` | Semantic commands, invariant checks, and receipts | [Workspace](domains/workspace/CONTRACT.md) |
 | Surface model | `SceneDocument` | Durable scene elements, local coordinates, and CRDT state | [Surface model](domains/surface/CONTRACT.md) |
-| Interaction | `InkSession`, `ViewportController`, `CanvasSceneRenderer` | Active input, camera state, and pixels | [Interaction](domains/interaction/CONTRACT.md) |
+| Interaction | `InkSession`, `ViewportController`, `SpatialWorkspaceController`, `CanvasSceneRenderer` | Active input, camera state, spatial transition, and pixels | [Interaction](domains/interaction/CONTRACT.md) |
 | Local persistence | `LocalWorkspaceStore` | IndexedDB replica and durable outgoing queue | [Local persistence](domains/local-persistence/CONTRACT.md) |
 | Synchronization | `SyncClient`, `SyncGateway`, PostgreSQL | Delivery, idempotency, revisions, and recovery stream | [Synchronization](domains/synchronization/CONTRACT.md) |
 | Identity and access | `SessionAuthority` | Anonymous device identity, membership, and linking | [Identity and access](domains/identity/CONTRACT.md) |

@@ -39,11 +39,18 @@ function intentSurfaces(intent: CommandIntent): readonly Readonly<{
   createsSurface: boolean;
 }>[] {
   if (intent.kind === "createSurfaces") {
-    return intent.surfaces.map((surface) => Object.freeze({
-      surfaceId: surface.surfaceId,
-      changes: surface.changes,
-      createsSurface: true,
-    }));
+    return [
+      ...(intent.patches ?? []).map((surface) => Object.freeze({
+        surfaceId: surface.surfaceId,
+        changes: surface.changes,
+        createsSurface: false,
+      })),
+      ...intent.surfaces.map((surface) => Object.freeze({
+        surfaceId: surface.surfaceId,
+        changes: surface.changes,
+        createsSurface: true,
+      })),
+    ];
   }
   const changes: readonly SceneChange[] = intent.kind === "commitStroke"
     ? [{ action: "put", element: intent.stroke }]
@@ -55,14 +62,16 @@ function intentSurfaces(intent: CommandIntent): readonly Readonly<{
   })];
 }
 
-function targetIds(intent: CommandIntent): readonly string[] {
-  return intentSurfaces(intent).flatMap((surface) => surface.changes.map((change) =>
-    change.action === "put" ? change.element.id : change.elementId));
+function targetKeys(intent: CommandIntent): readonly string[] {
+  return intentSurfaces(intent).flatMap((surface) => surface.changes.map((change) => {
+    const elementId = change.action === "put" ? change.element.id : change.elementId;
+    return `${surface.surfaceId}\u0000${elementId}`;
+  }));
 }
 
 function assertUniqueTargets(intent: CommandIntent): void {
-  const ids = targetIds(intent);
-  if (new Set(ids).size !== ids.length || ids.length === 0) {
+  const keys = targetKeys(intent);
+  if (new Set(keys).size !== keys.length || keys.length === 0) {
     throw new SyncRejection("invalid_operation", "One operation must change each target at most once.");
   }
 }
@@ -78,6 +87,7 @@ function validateMeaning(
   changes: readonly SceneChange[],
   before: readonly SceneElement[],
   after: readonly SceneElement[],
+  createdSurfaceIds: ReadonlySet<string>,
 ): void {
   const beforeById = new Map(before.map((element) => [element.id, element]));
   const afterById = new Map(after.map((element) => [element.id, element]));
@@ -93,7 +103,28 @@ function validateMeaning(
       }
       continue;
     }
-    validateSceneElement(change.element);
+    const nextElement = change.element;
+    validateSceneElement(nextElement);
+    if (previous && previous.kind !== nextElement.kind) {
+      throw new SyncRejection("invalid_operation", "An existing element cannot change its semantic kind.");
+    }
+    if (nextElement.kind === "item") {
+      const nextReferences = [nextElement.coverSurfaceId, ...nextElement.pageSurfaceIds];
+      if (previous?.kind === "item") {
+        if (previous.coverSurfaceId !== nextElement.coverSurfaceId) {
+          throw new SyncRejection("invalid_operation", "A workspace item's cover identity is stable.");
+        }
+        if (previous.pageSurfaceIds.some((surfaceId) => !nextElement.pageSurfaceIds.includes(surfaceId))) {
+          throw new SyncRejection("invalid_operation", "Page removal needs an explicit structural command.");
+        }
+        const previousReferences = new Set([previous.coverSurfaceId, ...previous.pageSurfaceIds]);
+        if (nextReferences.some((surfaceId) => !previousReferences.has(surfaceId) && !createdSurfaceIds.has(surfaceId))) {
+          throw new SyncRejection("invalid_operation", "A new page must be created with its manifest reference.");
+        }
+      } else if (nextReferences.some((surfaceId) => !createdSurfaceIds.has(surfaceId))) {
+        throw new SyncRejection("invalid_operation", "A workspace item must be created with its cover and pages.");
+      }
+    }
     if (stable(afterById.get(id)) !== stable(expectedElement(change, previous))) {
       throw new SyncRejection("invalid_operation", "The put intent does not match its CRDT update.");
     }
@@ -115,6 +146,9 @@ function validateOperation(
     throw new SyncRejection("invalid_operation", "The intent and updates target different surfaces.");
   }
   const changedIds = new Set<string>();
+  const createdSurfaceIds = new Set(
+    declaredSurfaces.filter((surface) => surface.createsSurface).map((surface) => surface.surfaceId),
+  );
   const validatedSurfaces = [];
   for (const declared of declaredSurfaces) {
     const current = surfaces.find((surface) => surface.surfaceId === declared.surfaceId);
@@ -132,7 +166,7 @@ function validateOperation(
     if (stable(actual) !== stable(expected)) {
       throw new SyncRejection("invalid_operation", "The intent and semantic transition change different elements.");
     }
-    validateMeaning(declared.changes, before.elements, scene.snapshot().elements);
+    validateMeaning(declared.changes, before.elements, scene.snapshot().elements, createdSurfaceIds);
     for (const id of actual) changedIds.add(id);
     validatedSurfaces.push(Object.freeze({
       surfaceId: scene.surfaceId,

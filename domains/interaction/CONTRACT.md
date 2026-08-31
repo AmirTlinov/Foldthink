@@ -2,14 +2,16 @@
 
 > Domain: active input, viewport state, and visual readout.
 >
-> Owners: `InkSession`, `ViewportController`, and `CanvasSceneRenderer`.
+> Owners: `InkSession`, `ViewportController`, `SpatialWorkspaceController`, and
+> `CanvasSceneRenderer`.
 
 ## Responsibility split
 
 | Owner | Owned responsibility | State lifetime |
 |---|---|---|
 | `InkSession` | The active pen or eraser gesture and its actual samples | One pointer gesture |
-| `ViewportController` | Camera transform, selection, pinch focus, and board/item transition | Current browser session |
+| `ViewportController` | Board camera transform and pinch anchor | Current browser session |
+| `SpatialWorkspaceController` | Selection, move feedback, and board/item transition | Current browser session |
 | `CanvasSceneRenderer` | Pixels derived from scene snapshots, active input, and viewport | One rendered frame |
 
 The DOM pointer adapter gives every pointer sequence to one `GestureArena`. The
@@ -44,7 +46,7 @@ cancelled. Routing contains no durable workspace state.
 7. Eraser geometry is hit-tested in surface-local coordinates and produces an
    `EraseMask`, not whole-element deletion.
 
-## ViewportController guarantees
+## Viewport and spatial workspace guarantees
 
 1. Camera state is local and never enters a `SceneDocument` update.
 2. A pinch keeps its initial world-space focal point beneath the same finger-space
@@ -55,6 +57,9 @@ cancelled. Routing contains no durable workspace state.
    into `board` or `item`.
 5. A double-tap on an item performs the explicit open action.
 6. A tap on empty board space clears item selection.
+7. A held selected item gains one lifted move preview; dropping over another item
+   emits one ordered stack change, while dropping in free space removes prior
+   stack membership.
 
 ## CanvasSceneRenderer guarantees
 
@@ -78,7 +83,8 @@ diagnostic event.
 
 ## Executable proof
 
-Implemented by [ink-session.test.ts](tests/ink-session.test.ts).
+Implemented by [ink-session.test.ts](tests/ink-session.test.ts) and
+[spatial-workspace-controller.test.ts](tests/spatial-workspace-controller.test.ts).
 
 - One physical stroke yields one durable `InkStroke` with no replacement flash.
 - Predicted samples never appear in serialized geometry.

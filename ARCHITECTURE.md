@@ -78,7 +78,8 @@ when doing so keeps the code clear.
 | Semantic mutation | `WorkspaceRuntime` | Accepts commands, checks invariants, and creates a CRDT change | Every adapter receives the same result from the same command |
 | Surface content | `SceneDocument` | Scene elements and their CRDT representation | Two clients converge on one scene regardless of delivery order |
 | Active stroke | `InkSession` | One active point buffer with one `strokeId` | The screen does not contain separate draft and final lines from different owners |
-| Camera and gesture | `ViewportController` | Pan, scale, pinch focus, and board/item transitions | The camera follows the fingers continuously without changing content |
+| Board camera | `ViewportController` | Pan, scale, and pinch focus | The camera follows the fingers continuously without changing content |
+| Spatial interaction | `SpatialWorkspaceController` | Selection, lifted movement, and board/item transitions | Every gesture settles on the board or inside one item |
 | Rendering | `CanvasSceneRenderer` | Turns a scene snapshot and active stroke into pixels | React does not rerender for every Pencil point |
 | Local durability | `LocalWorkspaceStore` | IndexedDB copy, local updates, and outbox | Unacknowledged work survives a local reload |
 | Delivery | `SyncClient` and `SyncGateway` | WebSocket, retries, acknowledgements, and live messages | Retrying one operation does not create a second action |
