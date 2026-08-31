@@ -86,9 +86,17 @@ when doing so keeps the code clear.
 | Server durability | PostgreSQL | Operations, updates, snapshots, sessions, and asset metadata | An acknowledged revision can be restored into a clean database |
 | Large bytes | S3/R2-compatible storage | Attachments, derived files, and backups | Large bytes stay outside the database, and an offsite copy survives VPS loss |
 | Agent entry point | `WebMCPAdapter` | Turns a typed tool call into a domain command | The agent passes the same model validation and receives a receipt |
+| Document readout | `DocumentRenderer` | Derived Markdown, math, and document layout | Deleting a readout leaves source intact and allows a complete rebuild |
+| LaTeX artifacts | `LatexCompiler` | Restricted Tectonic jobs and reproducible output | One source/version key yields one verified derived artifact |
+| Interactive execution | `WidgetHost` | Sandboxed widget lifecycle and typed messages | A widget can fail without gaining page authority or breaking the document |
+| Asset lifecycle | `AssetService` | Upload authorization, verification, metadata, and scoped retrieval | Only verified ready bytes become scene content |
+| Operational proof | Release process and pgBackRest | Exact revision, migration result, offsite backup, and clean restore | A release can identify and restore the state it claims to protect |
 
 Yjs is an internal mechanism of `SceneDocument`. A domain command remains the only
 public editing API available to adapters.
+
+The corresponding observable boundaries are indexed in
+[CONTRACTS.md](CONTRACTS.md) and divided by ownership domain under `contracts/`.
 
 ## 5. Proposed repository shape
 
@@ -103,9 +111,11 @@ Foldthink/
 |   `-- core/         # commands, scene types, schemas, receipts
 |-- migrations/       # ordered PostgreSQL migrations
 |-- infra/            # Caddy, Docker Compose, backup and restore scripts
+|-- contracts/        # one observable contract per ownership domain
 |-- tests/
 |   `-- e2e/          # browser and cross-device contracts
 |-- ARCHITECTURE.md
+|-- CONTRACTS.md      # implementation-contract index and ownership map
 |-- PHILOSOPHY.md
 |-- README.md
 `-- LICENSE
@@ -358,10 +368,10 @@ Coordinates, a handwritten cover title, and page content live in the scene. The
 tables do not keep a competing copy of user meaning. Search indexes, when they
 appear, are explicitly derived and rebuildable.
 
-Large attachments are uploaded to S3/R2-compatible object storage through a
-server-scoped capability. PostgreSQL stores their verifiable metadata. Compilation
-outputs and previews are addressed by a hash of source, renderer version, and
-parameters, making them a reproducible cache.
+`AssetService` uploads large attachments to S3/R2-compatible object storage through
+a server-scoped capability. PostgreSQL stores their verifiable metadata.
+Compilation outputs and previews are addressed by a hash of source, renderer
+version, and parameters, making them a reproducible cache.
 
 ## 12. Documents, Markdown, LaTeX, and interactivity
 
@@ -369,17 +379,18 @@ For an editable block, source is always the owner of meaning. A double-tap on te
 opens CodeMirror 6 over that same block. Saving dispatches `EditMarkdown` or
 `EditLatex`; the preview is a purely derived result.
 
-Markdown flows through unified/remark. KaTeX renders mathematical fragments for an
-immediate preview. Tectonic compiles a complete `.tex` document in a separate,
-restricted process or container with no network and with limits on time, memory,
-output size, and permitted files. Compiler output never replaces the source.
+`DocumentRenderer` sends Markdown through unified/remark. KaTeX renders
+mathematical fragments for an immediate preview. `LatexCompiler` runs Tectonic for
+a complete `.tex` document in a separate, restricted process or container with no
+network and with limits on time, memory, output size, and permitted files. Compiler
+output never replaces the source.
 
 An interactive element lives as a `Widget` beside the document flow and visually
-matches the typography of the page. Its HTML/CSS/JS runs in a sandboxed iframe on a
-separate origin. It communicates with the document through typed `postMessage`
-events. Widget code receives only explicitly granted messages and network
-capabilities; cookies, the parent DOM, and the WebMCP API remain with the top-level
-page.
+matches the typography of the page. `WidgetHost` runs its HTML/CSS/JS in a sandboxed
+iframe on a separate origin. It communicates with the document through typed
+`postMessage` events. Widget code receives only explicitly granted messages and
+network capabilities; cookies, the parent DOM, and the WebMCP API remain with the
+top-level page.
 
 LaTeX therefore owns the document, while JavaScript owns an interactive window
 inside it. They form one page visually while keeping separate, safe ownership.

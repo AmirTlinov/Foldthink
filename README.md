@@ -11,8 +11,13 @@ The product principle is documented in [PHILOSOPHY.md](PHILOSOPHY.md).
 
 ## Architecture
 
-The system design and ownership contracts are documented in
+The system design and ownership model are documented in
 [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Implementation contracts
+
+Observable implementation boundaries are divided by domain, owner, and
+responsibility in [CONTRACTS.md](CONTRACTS.md).
 
 ## License
 
