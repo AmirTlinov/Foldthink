@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { IDBFactory } from "fake-indexeddb";
-import type { LocalCommit } from "@foldthink/workspace";
+import type { LocalCommit, WorkspaceRepair } from "@foldthink/workspace";
 import { LocalWorkspaceStore } from "../src/public-browser.js";
 
 test("surface, outbox, and receipt cross one IndexedDB transaction", async () => {
@@ -99,5 +99,60 @@ test("a durable local commit wakes the delivery owner once", async () => {
   });
   stop();
   assert.equal(wakeups, 1);
+  store.close();
+});
+
+test("repair replaces replica, outbox, and rejection receipts atomically", async () => {
+  const store = await LocalWorkspaceStore.open(new IDBFactory());
+  const identity = await store.getOrCreateIdentity();
+  const rejectedId = crypto.randomUUID();
+  const retainedId = crypto.randomUUID();
+  const commit = async (operationId: string, byte: number): Promise<void> => {
+    await store.commitLocal({
+      operation: {
+        protocolVersion: 1,
+        operationId,
+        workspaceId: identity.workspaceId,
+        intent: { kind: "patchSurface", surfaceId: "board", changes: [] },
+        updates: [{ surfaceId: "board", payload: new Uint8Array([byte]) }],
+      },
+      receipt: {
+        operationId,
+        changedIds: [`element-${byte}`],
+        surfaces: [{ surfaceId: "board" }],
+        syncState: "local",
+      },
+      surfaceStates: [{ surfaceId: "board", state: new Uint8Array([byte]) }],
+    });
+  };
+  await commit(rejectedId, 1);
+  await commit(retainedId, 2);
+  const retained = (await store.listOutbox(identity.workspaceId)).find((record) => record.operationId === retainedId);
+  assert.ok(retained);
+  const repair: WorkspaceRepair = {
+    surfaceStates: [{ surfaceId: "board", state: new Uint8Array([9]) }],
+    queued: [{
+      operation: { ...retained.operation, updates: [{ surfaceId: "board", payload: new Uint8Array([8]) }] },
+      receipt: {
+        operationId: retainedId,
+        changedIds: ["element-2"],
+        surfaces: [{ surfaceId: "board" }],
+        syncState: "queued",
+      },
+    }],
+    rejectedOperationIds: [rejectedId],
+  };
+  await store.installRepair(identity.workspaceId, repair, [{
+    operationId: rejectedId,
+    code: "invalid_operation",
+    message: "Rejected by the semantic owner.",
+  }]);
+
+  const loaded = await store.loadWorkspace(identity);
+  assert.deepEqual([...loaded.surfaces[0]?.state ?? []], [9]);
+  assert.deepEqual(loaded.outbox.map((record) => record.operationId), [retainedId]);
+  assert.deepEqual([...loaded.outbox[0]?.operation.updates[0]?.payload ?? []], [8]);
+  assert.equal(loaded.receipts.find((record) => record.operationId === rejectedId)?.receipt.syncState, "rejected");
+  assert.equal(loaded.receipts.find((record) => record.operationId === retainedId)?.receipt.syncState, "queued");
   store.close();
 });

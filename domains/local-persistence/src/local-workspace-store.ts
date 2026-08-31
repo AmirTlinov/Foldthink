@@ -1,6 +1,7 @@
 import type {
   CommandReceipt,
   LocalCommit,
+  WorkspaceRepair,
   WorkspaceCommitSink,
 } from "@foldthink/workspace";
 import {
@@ -24,6 +25,12 @@ export type LoadedWorkspace = Readonly<{
 export class LocalStorageError extends Error {
   override readonly name = "LocalStorageError";
 }
+
+export type RepairRejection = Readonly<{
+  operationId: string;
+  code: string;
+  message: string;
+}>;
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -230,6 +237,62 @@ export class LocalWorkspaceStore implements WorkspaceCommitSink {
     transaction.objectStore(stores.receipts).put(record);
     await completed;
     return receipt;
+  }
+
+  async installRepair(
+    workspaceId: string,
+    repair: WorkspaceRepair,
+    rejections: readonly RepairRejection[],
+  ): Promise<void> {
+    const transaction = this.#database.transaction(
+      [stores.surfaces, stores.outbox, stores.receipts],
+      "readwrite",
+    );
+    const completed = transactionDone(transaction);
+    const surfaceStore = transaction.objectStore(stores.surfaces);
+    const outboxStore = transaction.objectStore(stores.outbox);
+    const receiptStore = transaction.objectStore(stores.receipts);
+    const [existingSurfaces, existingOutbox] = await Promise.all([
+      requestResult(surfaceStore.index("workspaceId").getAll(workspaceId)) as Promise<SurfaceStateRecord[]>,
+      requestResult(outboxStore.index("workspaceId").getAll(workspaceId)) as Promise<OutboxRecord[]>,
+    ]);
+    for (const surface of existingSurfaces) surfaceStore.delete(surface.key);
+    for (const record of existingOutbox) outboxStore.delete(record.operationId);
+
+    for (const surface of repair.surfaceStates) {
+      surfaceStore.put({
+        key: surfaceStateKey(workspaceId, surface.surfaceId),
+        workspaceId,
+        surfaceId: surface.surfaceId,
+        state: surface.state,
+      } satisfies SurfaceStateRecord);
+    }
+    const createdAt = new Map(existingOutbox.map((record) => [record.operationId, record.createdAt]));
+    for (const queued of repair.queued) {
+      outboxStore.put({
+        operationId: queued.operation.operationId,
+        workspaceId,
+        operation: queued.operation,
+        createdAt: createdAt.get(queued.operation.operationId) ?? Date.now(),
+      } satisfies OutboxRecord);
+      receiptStore.put({
+        operationId: queued.operation.operationId,
+        workspaceId,
+        receipt: queued.receipt,
+      } satisfies ReceiptRecord);
+    }
+    for (const rejection of rejections) {
+      const receipt: CommandReceipt = Object.freeze({
+        operationId: rejection.operationId,
+        changedIds: Object.freeze([]),
+        surfaces: Object.freeze([]),
+        syncState: "rejected",
+        rejection: Object.freeze({ code: rejection.code, message: rejection.message }),
+      });
+      receiptStore.put({ operationId: rejection.operationId, workspaceId, receipt } satisfies ReceiptRecord);
+    }
+    await completed;
+    for (const listener of this.#outboxListeners) listener();
   }
 
   observeOutbox(listener: () => void): () => void {

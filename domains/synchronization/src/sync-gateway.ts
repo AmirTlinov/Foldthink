@@ -33,9 +33,31 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function intentSurfaces(intent: CommandIntent): readonly Readonly<{
+  surfaceId: string;
+  changes: readonly SceneChange[];
+  createsSurface: boolean;
+}>[] {
+  if (intent.kind === "createSurfaces") {
+    return intent.surfaces.map((surface) => Object.freeze({
+      surfaceId: surface.surfaceId,
+      changes: surface.changes,
+      createsSurface: true,
+    }));
+  }
+  const changes: readonly SceneChange[] = intent.kind === "commitStroke"
+    ? [{ action: "put", element: intent.stroke }]
+    : intent.changes;
+  return [Object.freeze({
+    surfaceId: intent.surfaceId,
+    changes,
+    createsSurface: false,
+  })];
+}
+
 function targetIds(intent: CommandIntent): readonly string[] {
-  if (intent.kind === "commitStroke") return [intent.stroke.id];
-  return intent.changes.map((change) => change.action === "put" ? change.element.id : change.elementId);
+  return intentSurfaces(intent).flatMap((surface) => surface.changes.map((change) =>
+    change.action === "put" ? change.element.id : change.elementId));
 }
 
 function assertUniqueTargets(intent: CommandIntent): void {
@@ -53,15 +75,12 @@ function expectedElement(change: Extract<SceneChange, { action: "put" }>, before
 }
 
 function validateMeaning(
-  intent: CommandIntent,
+  changes: readonly SceneChange[],
   before: readonly SceneElement[],
   after: readonly SceneElement[],
 ): void {
   const beforeById = new Map(before.map((element) => [element.id, element]));
   const afterById = new Map(after.map((element) => [element.id, element]));
-  const changes: readonly SceneChange[] = intent.kind === "commitStroke"
-    ? [{ action: "put", element: intent.stroke }]
-    : intent.changes;
   for (const change of changes) {
     const id = change.action === "put" ? change.element.id : change.elementId;
     const previous = beforeById.get(id);
@@ -86,30 +105,44 @@ function validateOperation(
   surfaces: readonly JournalSurface[],
 ): ValidatedOperation {
   assertUniqueTargets(operation.intent);
-  if (operation.updates.some((update) => update.surfaceId !== operation.intent.surfaceId)) {
-    throw new SyncRejection("invalid_operation", "The intent and update target different surfaces.");
+  const declaredSurfaces = intentSurfaces(operation.intent);
+  const declaredIds = declaredSurfaces.map((surface) => surface.surfaceId).sort();
+  const updateIds = operation.updates.map((update) => update.surfaceId).sort();
+  if (
+    new Set(updateIds).size !== updateIds.length ||
+    stable(declaredIds) !== stable(updateIds)
+  ) {
+    throw new SyncRejection("invalid_operation", "The intent and updates target different surfaces.");
   }
-  const current = surfaces.find((surface) => surface.surfaceId === operation.intent.surfaceId);
-  const scene = new SceneDocument(operation.intent.surfaceId, current?.state);
-  const before = scene.snapshot();
   const changedIds = new Set<string>();
-  for (const update of operation.updates) {
+  const validatedSurfaces = [];
+  for (const declared of declaredSurfaces) {
+    const current = surfaces.find((surface) => surface.surfaceId === declared.surfaceId);
+    if (declared.createsSurface && (current?.state || (current?.revision ?? 0) !== 0)) {
+      throw new SyncRejection("invalid_operation", "A created surface already exists.");
+    }
+    const scene = new SceneDocument(declared.surfaceId, current?.state);
+    const before = scene.snapshot();
+    const update = operation.updates.find((candidate) => candidate.surfaceId === declared.surfaceId);
+    if (!update) throw new SyncRejection("invalid_operation", "A declared surface has no update.");
     const applied = scene.applyUpdate(update.payload, operation.operationId);
-    for (const id of applied.changedIds) changedIds.add(id);
-  }
-  const actualIds = [...changedIds].sort();
-  const declaredIds = [...targetIds(operation.intent)].sort();
-  if (stable(actualIds) !== stable(declaredIds)) {
-    throw new SyncRejection("invalid_operation", "The intent and semantic transition change different elements.");
-  }
-  const after = scene.snapshot();
-  validateMeaning(operation.intent, before.elements, after.elements);
-  return Object.freeze({
-    changedIds: Object.freeze(actualIds),
-    surfaces: Object.freeze([Object.freeze({
+    const actual = [...applied.changedIds].sort();
+    const expected = declared.changes.map((change) =>
+      change.action === "put" ? change.element.id : change.elementId).sort();
+    if (stable(actual) !== stable(expected)) {
+      throw new SyncRejection("invalid_operation", "The intent and semantic transition change different elements.");
+    }
+    validateMeaning(declared.changes, before.elements, scene.snapshot().elements);
+    for (const id of actual) changedIds.add(id);
+    validatedSurfaces.push(Object.freeze({
       surfaceId: scene.surfaceId,
       state: scene.encodeState(),
-    })]),
+    }));
+  }
+  const actualIds = [...changedIds].sort();
+  return Object.freeze({
+    changedIds: Object.freeze(actualIds),
+    surfaces: Object.freeze(validatedSurfaces),
   });
 }
 

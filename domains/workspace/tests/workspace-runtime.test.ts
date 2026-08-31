@@ -62,3 +62,92 @@ test("a failed local commit publishes no scene transition", async () => {
   );
   assert.equal(runtime.inspect("board").elements.length, 0);
 });
+
+test("surface creation crosses one local durability boundary", async () => {
+  const sink = new MemorySink();
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], sink);
+  const receipt = await runtime.dispatch({
+    kind: "createSurfaces",
+    surfaces: [
+      {
+        surfaceId: "notebook-cover",
+        changes: [{ action: "put", element: { ...stroke, id: "cover-mark" } }],
+      },
+      {
+        surfaceId: "notebook-page-1",
+        changes: [{ action: "put", element: { ...stroke, id: "page-mark" } }],
+      },
+    ],
+  });
+
+  assert.equal(sink.commits.length, 1);
+  assert.deepEqual(receipt.changedIds, ["cover-mark", "page-mark"]);
+  assert.deepEqual(runtime.surfaceIds(), ["board", "notebook-cover", "notebook-page-1"]);
+  assert.equal(runtime.inspect("notebook-cover").elements[0]?.id, "cover-mark");
+  assert.equal(sink.commits[0]?.surfaceStates.length, 2);
+});
+
+test("failed surface creation publishes none of its surfaces", async () => {
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], {
+    async commitLocal(): Promise<CommandReceipt> {
+      throw new Error("storage failed");
+    },
+    async commitRemote(): Promise<void> {},
+  });
+
+  await assert.rejects(runtime.dispatch({
+    kind: "createSurfaces",
+    surfaces: [
+      {
+        surfaceId: "cover",
+        changes: [{ action: "put", element: { ...stroke, id: "cover-mark" } }],
+      },
+      {
+        surfaceId: "page",
+        changes: [{ action: "put", element: { ...stroke, id: "page-mark" } }],
+      },
+    ],
+  }), /storage failed/u);
+
+  assert.deepEqual(runtime.surfaceIds(), ["board"]);
+});
+
+test("repair drops a rejected change and rebases an independent queued change", async () => {
+  const sink = new MemorySink();
+  const runtime = new WorkspaceRuntime("workspace", [new SceneDocument("board")], sink);
+  const element = {
+    id: "rejected-mark",
+    kind: "markdown" as const,
+    version: 1,
+    x: 10,
+    y: 10,
+    width: 240,
+    source: "Rejected",
+    color: "#171714",
+    fontSize: 20,
+  };
+  await runtime.dispatch({
+    kind: "patchSurface",
+    surfaceId: "board",
+    changes: [{ action: "put", element }],
+  });
+  await runtime.dispatch({
+    kind: "patchSurface",
+    surfaceId: "board",
+    changes: [{ action: "put", element: { ...element, id: "kept-mark", source: "Kept" } }],
+  });
+  const rejectedOperationId = sink.commits[0]?.operation.operationId;
+  assert.ok(rejectedOperationId);
+
+  const confirmed = new SceneDocument("board");
+  const repair = runtime.prepareRepair(
+    [{ surfaceId: "board", state: confirmed.encodeState() }],
+    sink.commits.map((commit) => commit.operation),
+    rejectedOperationId,
+  );
+  runtime.installRepair(repair.surfaceStates);
+
+  assert.deepEqual(repair.rejectedOperationIds, [rejectedOperationId]);
+  assert.equal(repair.queued.length, 1);
+  assert.deepEqual(runtime.inspect("board").elements.map((candidate) => candidate.id), ["kept-mark"]);
+});

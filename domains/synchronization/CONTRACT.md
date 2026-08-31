@@ -116,6 +116,8 @@ Gateway semantic validation and idempotency are proved by
 The PostgreSQL transaction and reconstruction path is proved by
 [postgres-operation-journal.test.ts](tests/postgres-operation-journal.test.ts)
 when `TEST_DATABASE_URL` names the migrated verification database.
+Typed rejection, fresh-state reconstruction, and independent outbox replay are
+proved by [sync-client.test.ts](tests/sync-client.test.ts).
 
 - Two browser contexts converge after reordered live traffic and durable replay.
 - Retrying one operation concurrently produces one database operation and one set

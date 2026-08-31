@@ -12,7 +12,15 @@ export type PatchSurfaceIntent = Readonly<{
   changes: readonly SceneChange[];
 }>;
 
-export type CommandIntent = CommitStrokeIntent | PatchSurfaceIntent;
+export type CreateSurfacesIntent = Readonly<{
+  kind: "createSurfaces";
+  surfaces: readonly Readonly<{
+    surfaceId: string;
+    changes: readonly SceneChange[];
+  }>[];
+}>;
+
+export type CommandIntent = CommitStrokeIntent | PatchSurfaceIntent | CreateSurfacesIntent;
 
 export type SurfaceOperationUpdate = Readonly<{
   surfaceId: string;

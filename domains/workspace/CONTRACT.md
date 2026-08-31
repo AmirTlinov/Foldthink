@@ -34,7 +34,7 @@ operation lifecycle.
 The synchronization adapter calls:
 
 ```text
-acceptRemoteUpdate(CommittedUpdate) -> AppliedRemoteReceipt
+acceptRemoteState(surfaceId, committedState) -> SurfaceSnapshot
 ```
 
 A remote update is applied as an already committed update. It is not redispatched
@@ -66,7 +66,7 @@ CommandReceipt
 `-- syncState           # local | queued | committed | rejected
 ```
 
-The local path returns `local` or `queued`. The synchronization domain attaches
+The durable local path returns `queued`. The synchronization domain attaches
 server revisions and advances the same receipt to `committed`. A typed server
 rejection advances it to `rejected`; that terminal state names the rejection and
 the last committed revisions from which the local replica was repaired.

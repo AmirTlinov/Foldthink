@@ -20,6 +20,18 @@ import {
 
 export type SyncClientStatus = "connecting" | "shared" | "offline" | "rejected";
 
+class SyncRequestError extends Error {
+  override readonly name = "SyncRequestError";
+
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export type SyncClientOptions = Readonly<{
   runtime: WorkspaceRuntime;
   store: LocalWorkspaceStore;
@@ -129,19 +141,59 @@ export class SyncClient {
     while (this.#flushRequested && this.#readyToSend && !this.#stopped) {
       this.#flushRequested = false;
       for (const record of await this.#store.listOutbox(this.#identity.workspaceId)) {
-        const committed = await this.#request<CommittedOperation>(
-          `/api/workspaces/${encodeURIComponent(this.#identity.workspaceId)}/operations`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(encodeOperationEnvelope(record.operation)),
-          },
-        );
+        let committed: CommittedOperation;
+        try {
+          committed = await this.#request<CommittedOperation>(
+            `/api/workspaces/${encodeURIComponent(this.#identity.workspaceId)}/operations`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(encodeOperationEnvelope(record.operation)),
+            },
+          );
+        } catch (error) {
+          if (error instanceof SyncRequestError && [403, 413, 422, 426].includes(error.status)) {
+            await this.#repairRejectedOperation(record.operation.operationId, error);
+            this.#onStatus("rejected");
+            this.#flushRequested = true;
+            break;
+          }
+          throw error;
+        }
         await this.#store.acknowledge(this.#identity.workspaceId, committed.receipt);
         this.#advanceCursor(committed.sequence);
         this.#onStatus("shared");
       }
     }
+  }
+
+  async #repairRejectedOperation(
+    operationId: string,
+    rejection: SyncRequestError,
+  ): Promise<void> {
+    const state = await this.#request<WorkspaceState>(
+      `/api/workspaces/${encodeURIComponent(this.#identity.workspaceId)}/state`,
+      { method: "GET" },
+    );
+    const outbox = await this.#store.listOutbox(this.#identity.workspaceId);
+    const repair = this.#runtime.prepareRepair(
+      state.surfaces.map((surface) => Object.freeze({
+        surfaceId: surface.surfaceId,
+        state: decodeBytes(surface.state),
+      })),
+      outbox.map((record) => record.operation),
+      operationId,
+    );
+    const rejections = repair.rejectedOperationIds.map((rejectedId) => Object.freeze({
+      operationId: rejectedId,
+      code: rejectedId === operationId ? rejection.code : "dependent_repair",
+      message: rejectedId === operationId
+        ? rejection.message
+        : "The queued operation could not be replayed on committed workspace state.",
+    }));
+    await this.#store.installRepair(this.#identity.workspaceId, repair, rejections);
+    this.#runtime.installRepair(repair.surfaceStates);
+    this.#advanceCursor(state.cursor);
   }
 
   async #openSocket(): Promise<void> {
@@ -199,7 +251,18 @@ export class SyncClient {
       credentials: "include",
     });
     if (!response.ok) {
-      throw new Error(`Foldthink synchronization failed with HTTP ${response.status}.`);
+      let code = "http_error";
+      let message = `Foldthink synchronization failed with HTTP ${response.status}.`;
+      try {
+        const body = await response.json() as Readonly<{
+          error?: Readonly<{ code?: unknown; message?: unknown }>;
+        }>;
+        if (typeof body.error?.code === "string") code = body.error.code;
+        if (typeof body.error?.message === "string") message = body.error.message;
+      } catch {
+        // The HTTP status remains the stable failure fact.
+      }
+      throw new SyncRequestError(response.status, code, message);
     }
     return response.json() as Promise<T>;
   }

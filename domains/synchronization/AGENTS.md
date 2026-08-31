@@ -21,6 +21,7 @@ domains/synchronization/
 |   |-- sync-client.ts             # Bootstrap, recovery, outbox, and reconnect order.
 |   `-- websocket-sync-transport.ts # Authenticated recovery and live stream.
 `-- tests/
+    |-- sync-client.test.ts        # Typed rejection and safe local repair proof.
     |-- sync-gateway.test.ts       # Semantic validation and idempotency proof.
     `-- postgres-operation-journal.test.ts # Real transaction and restore proof.
 ```

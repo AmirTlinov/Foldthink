@@ -16,6 +16,28 @@ export type OperationEnvelope = Readonly<{
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const idPattern = /^[A-Za-z0-9._:-]{1,160}$/u;
 
+function validateChanges(changes: unknown): void {
+  if (!Array.isArray(changes) || changes.length === 0 || changes.length > 64) {
+    throw new ProtocolError("invalid_envelope", "A surface change set needs between one and 64 changes.");
+  }
+  for (const change of changes) {
+    if (!change || typeof change !== "object") {
+      throw new ProtocolError("invalid_envelope", "A surface change is malformed.");
+    }
+    if ("action" in change && change.action === "put") {
+      if (!("element" in change) || !change.element || typeof change.element !== "object" || !("id" in change.element) || typeof change.element.id !== "string") {
+        throw new ProtocolError("invalid_envelope", "A put change needs an element.");
+      }
+    } else if ("action" in change && change.action === "delete") {
+      if (!("elementId" in change) || typeof change.elementId !== "string" || !idPattern.test(change.elementId)) {
+        throw new ProtocolError("invalid_envelope", "A delete change needs an element ID.");
+      }
+    } else {
+      throw new ProtocolError("invalid_envelope", "A surface change action is unsupported.");
+    }
+  }
+}
+
 function encodeBytes(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -82,37 +104,35 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     throw new ProtocolError("invalid_envelope", "The operation needs a typed intent.");
   }
   const intent = candidate.intent as CommandIntent;
-  if (
-    (intent.kind !== "commitStroke" && intent.kind !== "patchSurface") ||
+  if (intent.kind !== "commitStroke" && intent.kind !== "patchSurface" && intent.kind !== "createSurfaces") {
+    throw new ProtocolError("invalid_envelope", "The operation intent is unsupported.");
+  }
+  if (intent.kind === "createSurfaces") {
+    if (!Array.isArray(intent.surfaces) || intent.surfaces.length === 0 || intent.surfaces.length > 16) {
+      throw new ProtocolError("invalid_envelope", "A createSurfaces intent needs between one and 16 surfaces.");
+    }
+    const surfaceIds = new Set<string>();
+    for (const surface of intent.surfaces) {
+      if (!surface || typeof surface !== "object" || typeof surface.surfaceId !== "string" || !idPattern.test(surface.surfaceId)) {
+        throw new ProtocolError("invalid_envelope", "A created surface needs a valid ID.");
+      }
+      if (surfaceIds.has(surface.surfaceId)) {
+        throw new ProtocolError("invalid_envelope", "A createSurfaces intent cannot repeat a surface.");
+      }
+      surfaceIds.add(surface.surfaceId);
+      validateChanges(surface.changes);
+    }
+  } else if (
     typeof intent.surfaceId !== "string" ||
     !idPattern.test(intent.surfaceId)
   ) {
-    throw new ProtocolError("invalid_envelope", "The operation intent is unsupported.");
-  }
-  if (intent.kind === "commitStroke") {
+    throw new ProtocolError("invalid_envelope", "The operation intent needs a valid surface ID.");
+  } else if (intent.kind === "commitStroke") {
     if (!intent.stroke || typeof intent.stroke !== "object" || intent.stroke.kind !== "ink") {
       throw new ProtocolError("invalid_envelope", "A commitStroke intent needs one ink stroke.");
     }
   } else {
-    if (!Array.isArray(intent.changes) || intent.changes.length === 0 || intent.changes.length > 64) {
-      throw new ProtocolError("invalid_envelope", "A patchSurface intent needs between one and 64 changes.");
-    }
-    for (const change of intent.changes) {
-      if (!change || typeof change !== "object") {
-        throw new ProtocolError("invalid_envelope", "A surface change is malformed.");
-      }
-      if (change.action === "put") {
-        if (!change.element || typeof change.element !== "object" || typeof change.element.id !== "string") {
-          throw new ProtocolError("invalid_envelope", "A put change needs an element.");
-        }
-      } else if (change.action === "delete") {
-        if (typeof change.elementId !== "string" || !idPattern.test(change.elementId)) {
-          throw new ProtocolError("invalid_envelope", "A delete change needs an element ID.");
-        }
-      } else {
-        throw new ProtocolError("invalid_envelope", "A surface change action is unsupported.");
-      }
-    }
+    validateChanges(intent.changes);
   }
   if (!Array.isArray(candidate.updates) || candidate.updates.length === 0 || candidate.updates.length > 16) {
     throw new ProtocolError("invalid_envelope", "An operation needs between one and 16 surface updates.");
@@ -135,6 +155,13 @@ export function decodeOperationEnvelope(input: unknown): LocalOperation {
     }
     return Object.freeze({ surfaceId: update.surfaceId, payload });
   });
+  if (intent.kind === "createSurfaces") {
+    const declared = [...intent.surfaces.map((surface) => surface.surfaceId)].sort();
+    const updated = [...updates.map((update) => update.surfaceId)].sort();
+    if (new Set(updated).size !== updated.length || JSON.stringify(declared) !== JSON.stringify(updated)) {
+      throw new ProtocolError("invalid_envelope", "Created surfaces and updates must match exactly.");
+    }
+  }
   return Object.freeze({
     protocolVersion: 1,
     operationId: candidate.operationId,

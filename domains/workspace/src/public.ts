@@ -6,6 +6,7 @@ export type {
 export type {
   CommandIntent,
   CommitStrokeIntent,
+  CreateSurfacesIntent,
   LocalOperation,
   PatchSurfaceIntent,
   SurfaceOperationUpdate,
@@ -15,3 +16,8 @@ export type {
   WorkspaceCommitSink,
 } from "./workspace-commit-sink.js";
 export { WorkspaceRuntime } from "./workspace-runtime.js";
+export type {
+  RebasedQueuedOperation,
+  WorkspaceRepair,
+  WorkspaceSurfaceState,
+} from "./workspace-runtime.js";
