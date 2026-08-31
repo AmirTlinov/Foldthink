@@ -10,6 +10,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@foldthink/agent-integration": "workspace:*",
     "@foldthink/interaction": "workspace:*",
     "@foldthink/local-persistence": "workspace:*",
     "@foldthink/surface": "workspace:*",

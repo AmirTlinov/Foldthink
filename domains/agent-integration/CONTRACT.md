@@ -38,8 +38,6 @@ responses.
 |---|---|---|---|
 | `inspect_surface` | read | Read the current visible surface projection | Surface ID, visible element IDs, and revisions |
 | `patch_surface` | edit | Dispatch one typed element patch | Operation ID, changed IDs, sync state, and revisions when committed |
-| `create_item` | edit | Dispatch one notebook- or document-creation command | New item and surface IDs plus receipt |
-| `focus_item` | local page control | Ask `ViewportController` to focus an item | The item ID actually focused by the page |
 
 ## Inspection guarantees
 
@@ -82,3 +80,6 @@ A queued operation retains its honest queued receipt and can be inspected later.
   current ChatGPT built-in browser and the current Chrome WebMCP trial build.
 - Agent evals prove tool selection, schema adherence, cancellation, visible result
   before success, and bounded output on representative human-agent tasks.
+
+The active registration and same-runtime guarantees are proved by
+[webmcp-adapter.test.ts](tests/webmcp-adapter.test.ts).

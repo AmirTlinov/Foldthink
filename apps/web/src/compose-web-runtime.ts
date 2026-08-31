@@ -1,3 +1,4 @@
+import { WebMCPAdapter } from "@foldthink/agent-integration/browser";
 import {
   CanvasSceneRenderer,
   PointerIntentAdapter,
@@ -43,6 +44,11 @@ export async function composeWebRuntime(
     viewport,
     onCommitError: () => onStatus("This stroke is visible but could not be saved"),
   });
+  const webmcp = new WebMCPAdapter(() => ({
+    runtime,
+    visibleSurfaceId: surfaceId,
+  }));
+  void webmcp.register().catch(() => undefined);
 
   if (import.meta.env.PROD && "serviceWorker" in navigator) {
     void navigator.serviceWorker.register(
@@ -56,6 +62,7 @@ export async function composeWebRuntime(
     surfaceId,
     runtime,
     destroy(): void {
+      void webmcp.destroy().catch(() => undefined);
       stopObserving();
       pointerAdapter.destroy();
       renderer.destroy();

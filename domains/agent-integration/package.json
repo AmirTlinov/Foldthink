@@ -1,0 +1,16 @@
+{
+  "name": "@foldthink/agent-integration",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": "./src/public-browser.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@foldthink/surface": "workspace:*",
+    "@foldthink/workspace": "workspace:*"
+  }
+}

@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@foldthink/agent-integration':
+        specifier: workspace:*
+        version: link:../../domains/agent-integration
       '@foldthink/interaction':
         specifier: workspace:*
         version: link:../../domains/interaction
@@ -69,6 +72,15 @@ importers:
       vite:
         specifier: 8.2.2
         version: 8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(tsx@4.23.13)
+
+  domains/agent-integration:
+    dependencies:
+      '@foldthink/surface':
+        specifier: workspace:*
+        version: link:../surface
+      '@foldthink/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   domains/interaction:
     dependencies:

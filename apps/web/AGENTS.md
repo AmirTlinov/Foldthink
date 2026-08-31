@@ -18,7 +18,7 @@ apps/web/
 |-- src/
 |   |-- main.tsx                  # React composition entry.
 |   |-- foldthink-page.tsx        # Continuous full-screen surface shell.
-|   |-- compose-web-runtime.ts    # Browser domain wiring and teardown.
+|   |-- compose-web-runtime.ts    # Browser domain and page-local WebMCP wiring.
 |   `-- app-theme.css             # Surface material and minimal status readout.
 `-- tests/
     `-- web-startup.test.ts       # Direct-to-surface shell proof.
