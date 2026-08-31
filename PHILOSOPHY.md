@@ -1,107 +1,111 @@
-# Философия Foldthink
+# Foldthink Philosophy
 
-## Короткая форма
+## The short form
 
-**Меньше интерфейса, меньше шума и меньше лишнего пути между возможным
-пользовательским намерением и его осуществлением.**
+**Less interface, less noise, and less unnecessary distance between a plausible
+user intent and its fulfillment.**
 
-Минимализм Foldthink измеряется не количеством кнопок и не пустотой экрана. Он
-измеряется расстоянием от мысли до действия. Если человек уже показывает своё
-намерение контекстом, приложение должно помочь ему исполнить это намерение прямо.
+Foldthink does not measure minimalism by the number of buttons or the amount of
+empty space. It measures minimalism by the distance between thought and action.
+When a person has already expressed intent through context, the application should
+help fulfill that intent directly.
 
 ```text
-намерение -> необходимый выбор -> действие -> видимый результат
+intent -> necessary choice -> action -> visible result
 ```
 
-Каждый дополнительный экран, режим, вопрос и панель должен сокращать этот путь
-сильнее, чем удлиняет его. Интерфейс заслуживает место, когда помогает сделать
-значимый выбор или понять следствие действия.
+Every additional screen, mode, question, and panel must shorten this path more than
+it lengthens it. Interface earns its place when it helps someone make a meaningful
+choice or understand the consequence of an action.
 
-## Возможное намерение
+## Plausible intent
 
-Возможное намерение — это действие, на которое уже указывает наблюдаемый контекст.
-Foldthink следует свидетельству, а не угадывает желания человека из воздуха.
+A plausible intent is an action already indicated by observable context. Foldthink
+follows evidence instead of inventing desires for the person.
 
-| Наблюдаемый контекст | Вероятное намерение | Прямой ответ Foldthink |
+| Observable context | Plausible intent | Foldthink's direct response |
 |---|---|---|
-| Pencil касается свободной поверхности | Писать или рисовать | Чернила появляются сразу под Pencil |
-| Человек дважды касается текста | Изменить этот текст | Открывается исходник именно этого блока |
-| Два пальца меняют расстояние на доске | Изменить масштаб вокруг пальцев | Камера непрерывно следует жесту |
-| Человек касается тетради | Работать с этой тетрадью | Тетрадь становится текущим предметом действий |
-| Человек просит агента посмотреть на лист | Продолжить общую мысль | Агент читает текущую поверхность и отвечает в её контексте |
+| Pencil touches an empty surface | Write or draw | Ink appears immediately beneath the Pencil |
+| A person double-taps text | Edit that text | The source for that exact block opens |
+| Two fingers change their distance on the board | Scale around those fingers | The camera follows the gesture continuously |
+| A person taps a notebook | Work with that notebook | The notebook becomes the current target of actions |
+| A person asks the agent to inspect a page | Continue a shared thought | The agent reads the current surface and responds in its context |
 
-Когда два намерения действительно ведут к разным последствиям, Foldthink даёт
-короткий понятный выбор. Когда следствие одинаково, приложение действует сразу.
+When two intents truly lead to different consequences, Foldthink presents one
+short, clear choice. When the consequence is the same, the application acts
+immediately.
 
-## Поверхность важнее оболочки
+## The surface comes before the shell
 
-Доска, тетрадь и документ являются самим продуктом. Панели и меню служат им.
-Первый кадр показывает рабочую поверхность, а анонимная сессия, загрузка и
-синхронизация устраиваются вокруг неё без отдельного ритуала.
+The board, notebook, and document are the product. Panels and menus serve them. The
+first frame shows the working surface; anonymous identity, loading, and
+synchronization arrange themselves around it without a separate ritual.
 
-Содержание получает основное пространство и внимание. Управление появляется рядом
-с выбранным предметом, живёт столько, сколько нужен выбор, и освобождает поверхность
-после действия. Частое действие получает прямой жест. Редкое действие остаётся
-доступным по контексту.
+Content receives the primary space and attention. Controls appear beside the
+selected object, remain for as long as a choice is needed, and then return that
+space to the surface. A frequent action gets a direct gesture. A rare action
+remains available in context.
 
-## Прямое действие
+## Direct action
 
-Результат должен происходить там, где человек действует:
+The result should happen where the person acts:
 
-- Pencil оставляет линию под своим наконечником.
-- Перемещаемая тетрадь движется вместе с рукой и своим рисунком на обложке.
-- Щипок меняет одну камеру вокруг устойчивого фокуса.
-- Стирание меняет видимую геометрию и сохраняется как долговечное действие.
-- Команда агента меняет ту же поверхность, которую видит человек.
+- Apple Pencil leaves a line beneath its tip.
+- A moving notebook follows the hand together with the drawing on its cover.
+- A pinch changes one camera around a stable focal point.
+- Erasing changes visible geometry and persists as a durable action.
+- An agent command changes the same surface the person sees.
 
-Так обратная связь становится объяснением. Человеку не приходится держать в голове
-скрытое состояние и догадываться, применилось ли действие.
+Feedback therefore becomes an explanation. The person does not need to remember
+hidden state or guess whether an action took effect.
 
-## Спокойствие и сила
+## Calm and power
 
-Foldthink хранит сложность в механизме и показывает её только там, где она помогает
-мысли. Надёжная синхронизация, CRDT, резервные копии и анонимная идентичность могут
-быть сложными внутри; снаружи они выражаются непрерывностью работы и честным
-состоянием доставки.
+Foldthink keeps complexity inside the mechanism and reveals it only where it helps
+thought. Reliable synchronization, CRDTs, backups, and anonymous identity may be
+complex internally; externally, they appear as continuity of work and an honest
+delivery state.
 
-Сила продукта живёт в содержимом. Документ может включать математику, схему или
-интерактивный элемент, созданный агентом, оставаясь спокойной страницей. Богатая
-мысль не требует постоянного управляющего обрамления вокруг неё.
+The product's power lives in its content. A document may contain mathematics, a
+diagram, or an interactive element created by an agent while remaining a calm
+page. A rich thought does not require a permanently elaborate control frame around
+it.
 
-## Человек и агент думают на одном месте
+## A person and an agent think in the same place
 
-Агент является ещё одним участником общей поверхности, а не отдельным приложением
-рядом. Он видит текущий контекст, использует те же смысловые команды и возвращает
-проверяемый результат. Человек может продолжить рисунок агента, а агент — продолжить
-рукописную мысль человека.
+The agent is another participant on the shared surface, not a separate application
+beside it. It sees the current context, uses the same semantic commands, and
+returns a verifiable result. A person can continue the agent's drawing, and the
+agent can continue the person's handwritten thought.
 
-Это сокращает главный путь Foldthink:
+This shortens Foldthink's central path:
 
 ```text
-мысль человека <-> общая поверхность <-> действие агента
+human thought <-> shared surface <-> agent action
 ```
 
-Объяснение, рисунок и изменение остаются в одном месте. Перенос контекста между
-чатом, файлом, редактором и доской становится работой системы, а не человека.
+Explanation, drawing, and change remain in one place. Carrying context among chat,
+files, editors, and boards becomes the system's work rather than the person's.
 
-## Проверка каждого решения
+## The test for every decision
 
-Перед добавлением элемента, шага или режима мы отвечаем на четыре вопроса:
+Before adding an element, step, or mode, we answer four questions:
 
-| Вопрос | Ответ, который оправдывает решение |
+| Question | The answer that justifies the decision |
 |---|---|
-| Какое наблюдаемое намерение владеет этим элементом? | Назван конкретный пользовательский контекст |
-| Какой путь он сокращает? | Убрано действие, ожидание или необходимость помнить состояние |
-| Как человек видит результат? | Следствие появляется рядом, сразу и однозначно |
-| Что происходит при ошибке? | Действие можно понять, отменить или безопасно повторить |
+| Which observable intent owns this element? | A concrete user context is named |
+| Which path does it shorten? | It removes an action, a wait, or the need to remember state |
+| How does the person see the result? | The consequence appears nearby, immediately, and unambiguously |
+| What happens after a mistake? | The action can be understood, undone, or safely repeated |
 
-Элемент без ясного владельца объединяется с существующим действием или уступает
-место содержимому. Если два решения одинаково исполняют намерение, Foldthink выбирает
-то, которое просит меньше, показывает меньше постороннего, раньше раскрывает
-результат и легче возвращает человека назад.
+An element without a clear owner merges with an existing action or gives its space
+back to content. If two designs fulfill the same intent equally well, Foldthink
+chooses the one that asks less, shows less unrelated material, reveals the result
+sooner, and makes the way back easier.
 
-## Итог
+## Conclusion
 
-Foldthink стремится не выглядеть минималистично, а быть коротким продолжением
-мысли. Хороший интерфейс здесь ощущается как отсутствие посредника: человек видит
-место для мысли, действует и сразу узнаёт в результате собственное намерение.
+Foldthink aims to be a short extension of thought rather than merely look
+minimalist. A good interface here feels like the absence of an intermediary: a
+person sees a place for thought, acts, and immediately recognizes their intent in
+the result.

@@ -1,48 +1,47 @@
-# Архитектура Foldthink
+# Foldthink Architecture
 
-> Статус: принятое решение для первой публичной реализации.
+> Status: accepted decision for the first public implementation.
 >
-> Дата: 31 августа 2026 года.
+> Date: August 31, 2026.
 >
-> Это целевой контракт, а не отчёт о готовности. Фактическое состояние доказывают
-> код, тесты, развёрнутая ревизия и проверка восстановления.
+> This is a target contract, not a readiness report. Code, tests, the deployed
+> revision, and a restore drill prove the actual state.
 
-## 1. Решение одним предложением
+## 1. The decision in one sentence
 
-Foldthink — это браузерная локально-отзывчивая поверхность совместного мышления:
-человек сразу рисует на бесконечной доске, агент видит и меняет ту же модель через
-WebMCP, браузер хранит рабочую копию и очередь отправки в IndexedDB, а собственный
-сервер Foldthink синхронизирует устройства и сохраняет подтверждённое состояние в
-PostgreSQL.
+Foldthink is a browser-based, locally responsive surface for shared thinking: a
+person can draw on an infinite board immediately, an agent can inspect and change
+the same model through WebMCP, the browser keeps a working copy and an outgoing
+queue in IndexedDB, and Foldthink's own server synchronizes devices and stores
+acknowledged state in PostgreSQL.
 
-Главная архитектурная мысль проста. У каждой мысли на холсте есть один смысловой
-владелец — модель рабочей области. Apple Pencil, жесты, интерфейс и агент лишь
-приносят ей команды, которые сходятся в одной версии рисунка.
+The main architectural idea is simple. Every thought on the canvas has one semantic
+owner: the workspace model. Apple Pencil, gestures, the interface, and the agent
+only bring commands to that owner, and those commands converge into one drawing.
 
-## 2. Продуктовый контракт
+## 2. Product contract
 
-Первый видимый экран Foldthink — доска. Человеку не нужно регистрироваться,
-выбирать тариф, создавать профиль или проходить приветствие. При первом открытии
-сервер незаметно выдаёт браузеру анонимную сессию и создаёт рабочую область. Если
-сеть отвечает медленно, доска всё равно принимает рисунок локально и отправляет его
-позже.
+The first visible Foldthink screen is the board. A person does not need to register,
+choose a plan, create a profile, or complete an introduction. On the first visit,
+the server silently gives the browser an anonymous session and creates a workspace.
+If the network responds slowly, the board still accepts drawing locally and sends
+it later.
 
-Одна и та же рабочая область должна исполнять следующие обещания:
+The workspace must keep these promises:
 
-1. Рисование ощущается локальным: горячий путь от Pointer Event до пикселя не ждёт
-   React, сеть или базу данных.
-2. Подтверждённое сервером действие возвращается после перезагрузки и на связанном
-   устройстве.
-3. Человек и агент меняют одну модель одними командами. Результат команды агента
-   имеет проверяемую квитанцию.
-4. Вход со второго устройства происходит одноразовой ссылкой или QR-кодом, а не
-   учётной записью.
-5. Рисунок доски, рисунок обложки и рисунок страницы принадлежат своим поверхностям
-   и двигаются вместе с ними.
-6. Удаление, стирание и редактирование являются такими же долговечными действиями,
-   как создание. Старое устройство после подключения не возвращает удалённое.
+1. Drawing feels local: the hot path from Pointer Event to pixel does not wait for
+   React, the network, or the database.
+2. A server-acknowledged action returns after reload and appears on a linked
+   device.
+3. The person and the agent change one model through the same commands. An agent
+   command returns a verifiable receipt.
+4. A second device joins through a one-time link or QR code rather than an account.
+5. Board ink, cover ink, and page ink belong to their respective surfaces and move
+   with them.
+6. Deletion, erasure, and editing are as durable as creation. A stale device cannot
+   restore deleted content when it reconnects.
 
-## 3. Контур системы
+## 3. System outline
 
 ```text
  Apple Pencil ----\
@@ -61,40 +60,39 @@ PostgreSQL.
                               PostgreSQL         Object storage
 ```
 
-Браузер является местом работы. Сервер является владельцем доставки,
-авторизации анонимной сессии и долговечного восстановления. PostgreSQL является
-владельцем структурированных долговечных данных. Объектное хранилище является
-владельцем крупных неизменяемых файлов и внешних резервных копий.
+The browser is the place where work happens. The server owns delivery, anonymous
+session authorization, and durable recovery. PostgreSQL owns durable structured
+data. Object storage owns large immutable files and offsite backups.
 
-Это **cloud-backed local-first** модель. Локальная копия нужна для мгновенного
-действия и офлайна. Серверная копия нужна, чтобы вернуться завтра, открыть ту же
-работу на другом устройстве и восстановиться после потери браузерного хранилища.
+This is a **cloud-backed local-first** model. The local copy provides immediate
+action and offline work. The server copy lets a person return tomorrow, open the
+same work on another device, and recover after browser storage is lost.
 
-## 4. Карта владельцев
+## 4. Ownership map
 
-Названия ниже описывают обязанности. Реальные типы могут называться так же, если
-это сохраняет ясность.
+The names below describe responsibilities. Concrete types may use the same names
+when doing so keeps the code clear.
 
-| Смысл | Владелец | Что он хранит или делает | Проверяемое следствие |
+| Meaning | Owner | What it stores or does | Verifiable consequence |
 |---|---|---|---|
-| Смысловая мутация | `WorkspaceRuntime` | Принимает команды, проверяет инварианты, создаёт CRDT-изменение | Любой адаптер получает одинаковый результат от одинаковой команды |
-| Содержимое поверхности | `SceneDocument` | Элементы сцены и их CRDT-представление | Два клиента сходятся к одной сцене независимо от порядка доставки |
-| Текущий штрих | `InkSession` | Один активный буфер точек с одним `strokeId` | На экране нет черновой и «настоящей» линии от разных владельцев |
-| Камера и жест | `ViewportController` | Панорама, масштаб, фокус щипка и переход доска/предмет | Камера следует пальцам непрерывно и не меняет содержимое |
-| Отрисовка | `SceneRenderer` | Превращает снимок сцены и активный штрих в пиксели | React не перерисовывается на каждую точку карандаша |
-| Локальная долговечность | `LocalWorkspaceStore` | IndexedDB-копия, локальные обновления и outbox | После локальной перезагрузки непринятые сервером действия не исчезают |
-| Доставка | `SyncClient` и `SyncGateway` | WebSocket, повторы, подтверждения и live-сообщения | Повторная отправка одной операции не создаёт второе действие |
-| Доступ | `SessionService` | Анонимные сессии, членство и одноразовое связывание | Знание действующей возможности даёт только назначенную роль |
-| Серверная долговечность | PostgreSQL | Операции, обновления, снимки, сессии и метаданные файлов | Подтверждённая ревизия восстанавливается из чистой базы |
-| Крупные байты | S3/R2-совместимое хранилище | Вложения, производные файлы и резервные копии | Крупные байты живут вне базы, а внешняя копия переживает потерю VPS |
-| Вход агента | `WebMCPAdapter` | Переводит типизированный вызов инструмента в доменную команду | Агент проходит проверку модели и получает квитанцию |
+| Semantic mutation | `WorkspaceRuntime` | Accepts commands, checks invariants, and creates a CRDT change | Every adapter receives the same result from the same command |
+| Surface content | `SceneDocument` | Scene elements and their CRDT representation | Two clients converge on one scene regardless of delivery order |
+| Active stroke | `InkSession` | One active point buffer with one `strokeId` | The screen does not contain separate draft and final lines from different owners |
+| Camera and gesture | `ViewportController` | Pan, scale, pinch focus, and board/item transitions | The camera follows the fingers continuously without changing content |
+| Rendering | `SceneRenderer` | Turns a scene snapshot and active stroke into pixels | React does not rerender for every Pencil point |
+| Local durability | `LocalWorkspaceStore` | IndexedDB copy, local updates, and outbox | Unacknowledged work survives a local reload |
+| Delivery | `SyncClient` and `SyncGateway` | WebSocket, retries, acknowledgements, and live messages | Retrying one operation does not create a second action |
+| Access | `SessionService` | Anonymous sessions, membership, and one-time linking | A valid capability grants only its assigned role |
+| Server durability | PostgreSQL | Operations, updates, snapshots, sessions, and asset metadata | An acknowledged revision can be restored into a clean database |
+| Large bytes | S3/R2-compatible storage | Attachments, derived files, and backups | Large bytes stay outside the database, and an offsite copy survives VPS loss |
+| Agent entry point | `WebMCPAdapter` | Turns a typed tool call into a domain command | The agent passes the same model validation and receives a receipt |
 
-Yjs является внутренним устройством `SceneDocument`. Единственным публичным API
-редактирования для адаптеров остаётся доменная команда.
+Yjs is an internal mechanism of `SceneDocument`. A domain command remains the only
+public editing API available to adapters.
 
-## 5. Предлагаемая форма репозитория
+## 5. Proposed repository shape
 
-Начальная структура отражает только реальные границы исполнения:
+The initial layout reflects only real execution boundaries:
 
 ```text
 Foldthink/
@@ -108,18 +106,19 @@ Foldthink/
 |-- tests/
 |   `-- e2e/          # browser and cross-device contracts
 |-- ARCHITECTURE.md
+|-- PHILOSOPHY.md
 |-- README.md
 `-- LICENSE
 ```
 
-`core` остаётся единственным общим пакетом. Он не зависит от DOM, Node.js,
-PostgreSQL или конкретного UI. Новый пакет появляется только вместе с новой
-границей владения и отдельным проверяемым контрактом.
+`core` remains the only shared package. It does not depend on the DOM, Node.js,
+PostgreSQL, or a particular UI. A new package appears only with a new ownership
+boundary and a separate verifiable contract.
 
-## 6. Модель предметной области
+## 6. Domain model
 
-Рабочая область состоит из лёгкого манифеста и независимых поверхностей. Поэтому
-открытие одной тетради не требует загружать каждую страницу всех тетрадей.
+A workspace consists of a lightweight manifest and independent surfaces. Opening
+one notebook therefore does not require loading every page of every notebook.
 
 ```text
 Workspace
@@ -138,35 +137,34 @@ Workspace
         `-- Document surface
 ```
 
-Манифест рабочей области владеет визуальным расположением предметов. PostgreSQL
-знает, к какой рабочей области относится поток поверхности, но не хранит вторую
-копию координат тетради. Создание предмета использует клиентские непрозрачные ID и
-одну идемпотентную операцию, которая регистрирует новые поверхности и обновляет
-манифест в одной серверной транзакции.
+The workspace manifest owns the visual placement of items. PostgreSQL knows which
+workspace owns a surface stream, but it does not keep a second copy of a notebook's
+coordinates. Item creation uses client-generated opaque IDs and one idempotent
+operation that registers the new surfaces and updates the manifest in one server
+transaction.
 
-Поверхность содержит одни и те же базовые элементы:
+Every surface uses the same primitive elements:
 
-| Элемент | Каноническое содержимое | Производное представление |
+| Element | Canonical content | Derived representation |
 |---|---|---|
-| `InkStroke` | Точки в локальных координатах, давление, инструмент, цвет | Canvas-путь и пространственный индекс |
-| `EraseMask` | Путь ластика и ID затронутых штрихов | Маска прозрачности слоя чернил |
-| `MarkdownBlock` | Markdown-исходник | HTML и KaTeX |
-| `LatexBlock` | LaTeX-исходник и параметры компиляции | SVG/PDF/HTML-превью |
-| `Shape` | Геометрия и стиль | Canvas/SVG-представление |
-| `Widget` | Версионированный HTML/CSS/JS-пакет и входные данные | Изолированный интерактивный iframe |
+| `InkStroke` | Points in local coordinates, pressure, tool, and color | Canvas path and spatial index |
+| `EraseMask` | Eraser path and IDs of affected strokes | Ink-layer transparency mask |
+| `MarkdownBlock` | Markdown source | HTML and KaTeX |
+| `LatexBlock` | LaTeX source and compilation parameters | SVG/PDF/HTML preview |
+| `Shape` | Geometry and style | Canvas/SVG representation |
+| `Widget` | Versioned HTML/CSS/JS bundle and input data | Isolated interactive iframe |
 
-Все геометрические данные хранятся в локальных координатах своей поверхности.
-Обложка переносит свой рисунок собственным transform, поэтому чернила не могут
-«отклеиться» при движении тетради. Экранные координаты, камера и размер окна в
-долговечную модель не попадают.
+All geometry is stored in the local coordinates of its surface. A cover moves its
+drawing through its own transform, so ink cannot detach while the notebook moves.
+Screen coordinates, camera state, and window size never enter the durable model.
 
-Материал доски и материал тетрадной страницы являются разными представлениями.
-Страница может рисовать сетку с шагом 5 мм в своей системе координат; сетка
-является фоном, а не тысячами элементов сцены.
+The board and a notebook page have different visual materials. A page may render a
+5 mm grid in its local coordinate system; the grid is a background rather than
+thousands of scene elements.
 
-## 7. Единственный путь мутации
+## 7. The single mutation path
 
-Локальное намерение принимает форму типизированной команды:
+Local intent becomes a typed command:
 
 ```text
 Intent adapter
@@ -180,15 +178,16 @@ WorkspaceRuntime.dispatch(Command)
     `-- publish one render snapshot
 ```
 
-Примеры команд: `CreateItem`, `MoveItem`, `CommitStroke`, `EraseInk`,
-`EditMarkdown`, `ApplyElementPatch`, `DeleteItem` и `UndoOwnAction`. Apple Pencil,
-React и WebMCP создают такие команды, а не собственные форматы мутаций.
+Example commands include `CreateItem`, `MoveItem`, `CommitStroke`, `EraseInk`,
+`EditMarkdown`, `ApplyElementPatch`, `DeleteItem`, and `UndoOwnAction`. Apple
+Pencil, React, and WebMCP create these commands rather than their own mutation
+formats.
 
-Сетевое обновление входит через `WorkspaceRuntime.acceptRemoteUpdate(update)`.
-Оно применяется к тем же `SceneDocument` и инвариантам, но не превращается заново
-в локальную команду и не отправляется второй раз.
+A network update enters through `WorkspaceRuntime.acceptRemoteUpdate(update)`. It
+is applied to the same `SceneDocument` and invariants, but it is not reinterpreted
+as a new local command or sent a second time.
 
-Результат имеет одну форму:
+Every result has one shape:
 
 ```text
 CommandReceipt
@@ -196,23 +195,23 @@ CommandReceipt
 |-- changedIds[]
 |-- surfaces[]
 |   |-- surfaceId
-|   `-- revision?       # появляется после серверного commit
+|   `-- revision?       # appears after the server commit
 `-- syncState           # local | queued | committed
 ```
 
-Интерфейс может продолжать работу после локальной квитанции. Мутирующий WebMCP-
-инструмент по умолчанию ждёт серверного подтверждения в пределах таймаута. При
-офлайне он честно возвращает `queued`, и агент не называет действие видимым на
-другом устройстве до последующей проверки.
+The interface may continue after a local receipt. By default, a mutating WebMCP
+tool waits for a server acknowledgement within a bounded timeout. While offline,
+it honestly returns `queued`, and the agent does not describe the change as visible
+on another device until a later inspection verifies it.
 
-## 8. Рисование, ластик и координаты
+## 8. Ink, erasing, and coordinates
 
-Клиент использует TypeScript, React 19 и Vite как оболочку PWA. Само рисование
-исполняется Canvas 2D runtime. Pointer Events дают координаты, тип указателя и
-давление. Фактические coalesced samples улучшают геометрию; predicted samples
-служат только краткой визуальной подсказкой и никогда не сохраняются.
+The client uses TypeScript, React 19, and Vite as the PWA shell. Drawing itself runs
+inside a Canvas 2D runtime. Pointer Events provide coordinates, pointer type, and
+pressure. Real coalesced samples improve geometry; predicted samples provide only a
+brief visual hint and are never persisted.
 
-Путь штриха выглядит так:
+A stroke follows this path:
 
 ```text
 pointerdown -> InkSession(strokeId)
@@ -220,41 +219,41 @@ pointermove -> active point buffer -> next animation frame -> Canvas
 pointerup   -> CommitStroke(same strokeId) -> scene + IndexedDB outbox
 ```
 
-При завершении кадр сначала видит долговечный элемент с тем же `strokeId`, а затем
-убирает активный overlay. Поэтому линия не заменяется другой линией и не моргает.
-Минимальная непрозрачность принадлежит настройке инструмента, а давление плавно
-интерполирует непрозрачность и, для поддерживающего это инструмента, ширину до
-максимума. Симулятор без давления даёт определённое нейтральное значение.
+At completion, the frame first sees the durable element with the same `strokeId`
+and then removes the active overlay. The line is therefore not replaced by a
+second line and does not flash. The tool setting owns minimum opacity. Pressure
+interpolates opacity and, for tools that support it, width toward their maximum.
+A simulator without pressure supplies a defined neutral value.
 
-Ластик создаёт геометрическую `EraseMask` по локальному пространственному индексу.
-Маска хранит путь и затронутые штрихи, поэтому стирает части линий, остаётся
-детерминированной при синхронизации и отменяется одной операцией. Рендерер сначала
-собирает прозрачный слой чернил, применяет маски и лишь затем кладёт слой поверх
-бумаги. Сетка страницы не стирается.
+The eraser creates a geometric `EraseMask` through the local spatial index. The
+mask stores its path and affected strokes, so it removes parts of lines, stays
+deterministic during synchronization, and can be undone as one operation. The
+renderer first builds a transparent ink layer, applies masks, and then composites
+that layer over the paper. The page grid remains intact.
 
-У координат три явных пространства:
+Coordinates have three explicit spaces:
 
-| Пространство | Владелец | Назначение |
+| Space | Owner | Purpose |
 |---|---|---|
-| CSS pixels | браузерный viewport | Ввод Pointer Events и положение UI |
-| World | `ViewportController` | Бесконечная доска и камера |
-| Surface local | `SceneDocument` | Долговечная геометрия элемента |
+| CSS pixels | Browser viewport | Pointer Event input and UI placement |
+| World | `ViewportController` | Infinite board and camera |
+| Surface local | `SceneDocument` | Durable element geometry |
 
-Преобразование выполняется один раз на входе. Canvas backing store следует
-`devicePixelRatio` и `ResizeObserver`; изменение окна пересоздаёт буфер и полностью
-перерисовывает сцену, а не растягивает старые пиксели.
+The conversion happens once at input. The Canvas backing store follows
+`devicePixelRatio` and `ResizeObserver`; a window change reallocates the buffer and
+rerenders the complete scene instead of stretching old pixels.
 
-Пальцы управляют камерой и предметами, Pencil управляет чернилами. Фокус щипка
-фиксируется в world-space на начало жеста. Открытие тетради является явным
-переходом `board -> entering(item, progress) -> item`, где прогресс следует жесту,
-имеет гистерезис и всегда завершается в одном из двух устойчивых состояний.
-Двойной тап даёт явную команду открытия. Эти правила позволяют приблизить доску,
-не заставляя систему преждевременно «проваливаться» в тетрадь.
+Fingers control the camera and objects. Pencil controls ink. The pinch focus is
+fixed in world space when the gesture begins. Opening a notebook is an explicit
+`board -> entering(item, progress) -> item` transition: progress follows the
+gesture, uses hysteresis, and always settles into one of two stable states. A
+double-tap issues an explicit open command. These rules let a person inspect the
+board more closely without being pulled prematurely into a notebook.
 
-## 9. Синхронизация
+## 9. Synchronization
 
-Yjs разрешает конкурентные изменения содержимого. Foldthink добавляет к нему
-долговечную доставку, идемпотентность и понятную квитанцию.
+Yjs resolves concurrent content changes. Foldthink adds durable delivery,
+idempotency, and an understandable receipt.
 
 ```text
 Browser A             Foldthink server             Browser B
@@ -268,50 +267,51 @@ Browser A             Foldthink server             Browser B
     |                        |                          |
 ```
 
-| Поток | Содержимое | Хранение | Потеря сообщения |
+| Stream | Content | Storage | Consequence of a lost message |
 |---|---|---|---|
-| Live | Незавершённые куски текущего штриха | Только память и WebSocket | Удалённое превью исчезает; итоговый штрих всё исправляет |
-| Durable | Завершённый штрих, стирание, текст, patch, создание, движение, удаление | IndexedDB outbox и PostgreSQL | Клиент повторяет тот же `operationId` |
+| Live | Chunks of an unfinished stroke | Memory and WebSocket only | The remote preview disappears; the final stroke corrects it |
+| Durable | Finished stroke, erasure, text, patch, creation, movement, deletion | IndexedDB outbox and PostgreSQL | The client retries the same `operationId` |
 
-Одна долговечная операция может касаться нескольких поверхностей. Сервер в одной
-транзакции проверяет членство, фиксирует уникальный `operationId`, регистрирует
-заявленные поверхности, добавляет Yjs updates, увеличивает монотонную ревизию
-каждой поверхности и только после commit рассылает подтверждение.
+One durable operation may touch several surfaces. In one transaction, the server
+checks membership, records the unique `operationId`, registers declared surfaces,
+appends Yjs updates, increments each surface's monotonic revision, and broadcasts
+the acknowledgement only after commit.
 
-Операция несёт типизированное намерение и ограниченный своей поверхностью CRDT-
-payload. `SyncGateway` применяет payload к проверочной копии материализованного
-состояния и запускает схемы и инварианты из `core` до commit. Клиентская проверка
-улучшает UX, а сервер повторяет её как границу безопасности. В журнал попадает
-только принятая типизированная операция.
+An operation carries typed intent and a CRDT payload scoped to its surfaces.
+`SyncGateway` applies that payload to a validation copy of the materialized state
+and runs the schemas and invariants from `core` before commit. Client validation
+improves UX; the server repeats it as a security boundary. Only an accepted typed
+operation enters the journal.
 
-Клиент удаляет запись из outbox только после подтверждения. При повторной отправке
-сервер возвращает сохранённую квитанцию. При восстановлении клиент получает
-последний компактный снимок и обновления после его ревизии, применяет их, а затем
-доставляет outbox. Снимок содержит CRDT-факт удаления, поэтому старый клиент не
-может воскресить стёртое простым подключением.
+The client removes an outbox record only after acknowledgement. If the operation is
+retried, the server returns the stored receipt. During recovery, the client fetches
+the latest compact snapshot and the updates after its revision, applies them, and
+then flushes the outbox. A snapshot contains the CRDT fact of deletion, so a stale
+client cannot resurrect erased content merely by reconnecting.
 
-Камера, выделение, наведённый инструмент и незавершённый жест являются локальным
-временным состоянием. Они синхронизируются только как live-presence, если продукту
-понадобится совместный указатель.
+Camera, selection, hovered tool, and unfinished gesture are transient local state.
+They join synchronization only as live presence if the product later needs a shared
+pointer.
 
-## 10. Анонимная сессия и связывание устройств
+## 10. Anonymous sessions and device linking
 
-Отсутствие регистрации означает невидимую capability-based идентичность, а не
-отсутствие контроля доступа.
+The absence of registration means invisible capability-based identity, not the
+absence of access control.
 
-До ответа сети браузер создаёт случайные `bootstrapId` и `workspaceId`, открывает
-локальную рабочую область и уже может складывать операции в outbox. Первый
-идемпотентный bootstrap-запрос просит сервер создать именно эту ещё не занятую
-рабочую область. Коллизия ID возвращает conflict и запускает локальный remap до
-первой отправки; обычный путь сохраняет все уже нарисованные ссылки без перевода.
+Before the network responds, the browser generates random `bootstrapId` and
+`workspaceId` values, opens a local workspace, and can already place operations in
+the outbox. The first idempotent bootstrap request asks the server to create that
+specific, still-unclaimed workspace. An ID collision returns `409 Conflict` and
+triggers a local ID remap before the first send; the normal path preserves every
+reference in the drawing as it was created.
 
-В ответ сервер создаёт криптографически случайный секрет устройства, хранит только
-его хэш и выдаёт браузеру защищённую cookie с атрибутами `HttpOnly`, `Secure` и
-`SameSite`. Сессия становится участником рабочей области, после чего outbox
-доставляется обычным sync-путём. На повторном открытии этот браузер продолжает
-работу автоматически.
+The server then creates a cryptographically random device secret, stores only its
+hash, and gives the browser a protected cookie with `HttpOnly`, `Secure`, and
+`SameSite` attributes. The session becomes a member of the workspace, and the
+outbox begins its normal synchronization path. The same browser continues
+automatically on the next visit.
 
-Связывание iPad и Mac происходит так:
+Linking an iPad and a Mac follows this sequence:
 
 ```text
 Existing device        Server             New device
@@ -323,93 +323,93 @@ Existing device        Server             New device
       |<====== both sessions share workspace ==|
 ```
 
-Join token имеет срок, одну роль, одно использование и хранится на сервере в виде
-хэша. После обмена браузер удаляет token из URL. Устройство можно отозвать, а
-рабочую область — удалить из доступной сессии.
+A join token has one role, one use, and an expiration, and the server stores only
+its hash. The browser removes the token from the URL after exchange. A device can
+be revoked, and an authorized session can delete the workspace.
 
-Граница восстановления честная: если человек потерял все связанные сессии и
-отдельный recovery secret, сервер больше не может доказать владение. Необязательный
-recovery QR/key может улучшить этот случай, но никогда не преграждает первый вход.
+The recovery boundary is honest: if a person loses every linked session and the
+separate recovery secret, the server can no longer prove ownership. An optional
+recovery QR code or key may improve this case, but it never blocks the first visit.
 
-## 11. Сервер и PostgreSQL
+## 11. Server and PostgreSQL
 
-Первый сервер — одно приложение на TypeScript и текущей LTS-версии Node.js. Оно
-обслуживает HTTP API, WebSocket sync, анонимные сессии, загрузки и WebMCP-связанные
-серверные действия. Один процесс сохраняет транзакционные границы видимыми. Делить
-его на сервисы следует после измеренной причины.
+The first server is one TypeScript application on the current Node.js LTS release.
+It serves the HTTP API, WebSocket synchronization, anonymous sessions, uploads,
+and WebMCP-related server actions. One process keeps transaction boundaries
+visible. It should split into services only after a measured reason appears.
 
-К PostgreSQL подключается только сервер Foldthink через частную сеть. Браузер
-разговаривает с API Foldthink. Концептуальная схема распределяет ответственность
-так:
+Only the Foldthink server connects to PostgreSQL through a private network. The
+browser talks to the Foldthink API. The conceptual schema assigns responsibility
+as follows:
 
-| Таблица | Владеет |
+| Table | Owns |
 |---|---|
-| `device_sessions` | Хэшем секрета устройства, сроком и отзывом |
-| `workspaces` | Идентичностью рабочей области и жизненным циклом |
-| `workspace_members` | Ролью анонимной сессии в рабочей области |
-| `workspace_operations` | Идемпотентностью операции и её итоговой квитанцией |
-| `surfaces` | Принадлежностью потока рабочей области и текущей ревизией |
-| `surface_updates` | Упорядоченными Yjs updates после операций |
-| `surface_snapshots` | Компактным состоянием до определённой ревизии |
-| `join_tokens` | Хэшами, ролями, сроками и использованием приглашений |
-| `assets` | Метаданными, checksum, MIME, размером и ключом объекта |
+| `device_sessions` | Device secret hash, expiration, and revocation |
+| `workspaces` | Workspace identity and lifecycle |
+| `workspace_members` | The anonymous session's role in a workspace |
+| `workspace_operations` | Operation idempotency and the resulting receipt |
+| `surfaces` | A stream's workspace ownership and current revision |
+| `surface_updates` | Ordered Yjs updates produced by operations |
+| `surface_snapshots` | Compact state through a particular revision |
+| `join_tokens` | Invitation hashes, roles, expirations, and consumption |
+| `assets` | Metadata, checksum, MIME type, size, and object key |
 
-Координаты, название на обложке и содержимое страницы живут в сцене. Таблицы не
-держат конкурирующую копию пользовательского смысла. Поисковые индексы, когда они
-появятся, будут явно производными и пересобираемыми.
+Coordinates, a handwritten cover title, and page content live in the scene. The
+tables do not keep a competing copy of user meaning. Search indexes, when they
+appear, are explicitly derived and rebuildable.
 
-Крупные вложения загружаются в S3/R2-совместимое объектное хранилище по ограниченной
-сервером возможности. PostgreSQL хранит их проверяемые метаданные. Компиляции и
-превью адресуются хэшем исходника, версии рендерера и параметров, поэтому являются
-воспроизводимым кэшем.
+Large attachments are uploaded to S3/R2-compatible object storage through a
+server-scoped capability. PostgreSQL stores their verifiable metadata. Compilation
+outputs and previews are addressed by a hash of source, renderer version, and
+parameters, making them a reproducible cache.
 
-## 12. Документы, Markdown, LaTeX и интерактивность
+## 12. Documents, Markdown, LaTeX, and interactivity
 
-У редактируемого блока исходник всегда является владельцем смысла. Двойной тап по
-тексту открывает CodeMirror 6 поверх того же блока; сохранение отправляет
-`EditMarkdown` или `EditLatex`, а preview является чистым производным результатом.
+For an editable block, source is always the owner of meaning. A double-tap on text
+opens CodeMirror 6 over that same block. Saving dispatches `EditMarkdown` or
+`EditLatex`; the preview is a purely derived result.
 
-Markdown проходит через unified/remark. Математические вставки для мгновенного
-preview рендерятся KaTeX. Полный `.tex` документ компилирует Tectonic в отдельном
-ограниченном процессе или контейнере без сети, с лимитами времени, памяти, размера
-выхода и разрешённого набора файлов. Выход компилятора не заменяет исходник.
+Markdown flows through unified/remark. KaTeX renders mathematical fragments for an
+immediate preview. Tectonic compiles a complete `.tex` document in a separate,
+restricted process or container with no network and with limits on time, memory,
+output size, and permitted files. Compiler output never replaces the source.
 
-Интерактивный элемент живёт как `Widget` рядом с потоком документа и визуально
-согласуется с типографикой страницы. Его HTML/CSS/JS исполняются в sandboxed iframe
-на отдельном origin. Связь с документом проходит через типизированные
-`postMessage`-события. Код виджета получает только явно выданные сообщения и
-сетевые возможности; cookie, DOM родителя и WebMCP API остаются у верхней страницы.
+An interactive element lives as a `Widget` beside the document flow and visually
+matches the typography of the page. Its HTML/CSS/JS runs in a sandboxed iframe on a
+separate origin. It communicates with the document through typed `postMessage`
+events. Widget code receives only explicitly granted messages and network
+capabilities; cookies, the parent DOM, and the WebMCP API remain with the top-level
+page.
 
-Так LaTeX отвечает за документ, а JavaScript — за интерактивное окно внутри него.
-Они складываются в одну страницу визуально, но сохраняют разные безопасные
-владения.
+LaTeX therefore owns the document, while JavaScript owns an interactive window
+inside it. They form one page visually while keeping separate, safe ownership.
 
 ## 13. WebMCP
 
-`WebMCPAdapter` регистрирует инструменты в верхней странице через
-`document.modelContext.registerTool`, потому что инструмент из вложенного iframe не
-должен становиться скрытым владельцем всей рабочей области. Поддержка WebMCP
-является progressive enhancement: обычная доска работает и в браузере без API.
+`WebMCPAdapter` registers tools in the top-level page through
+`document.modelContext.registerTool`, because an embedded iframe should not become
+a hidden owner of the workspace. WebMCP is a progressive enhancement: the board
+continues to work in a browser without this API.
 
-Начальный набор инструментов остаётся узким:
+The initial tool set remains narrow:
 
-| Инструмент | Действие | Проверка результата |
+| Tool | Action | Result verification |
 |---|---|---|
-| `inspect_current_surface` | Возвращает видимые элементы, ID и текущие ревизии | Агент понимает, что именно видит человек |
-| `apply_surface_patch` | Создаёт одну типизированную доменную операцию | Возвращает `operationId`, `changedIds` и серверные ревизии |
-| `create_notebook` | Создаёт манифест, обложку и первую страницу | Новый item виден в workspace manifest |
-| `create_document` | Создаёт document manifest и поверхность | Документ открывается на обоих устройствах |
-| `focus_item` | Меняет локальную камеру текущего браузера | Возвращает фактический focused item |
+| `inspect_current_surface` | Returns visible elements, IDs, and current revisions | The agent understands exactly what the person sees |
+| `apply_surface_patch` | Creates one typed domain operation | Returns `operationId`, `changedIds`, and server revisions |
+| `create_notebook` | Creates a manifest, cover, and first page | The new item appears in the workspace manifest |
+| `create_document` | Creates a document manifest and surface | The document opens on both devices |
+| `focus_item` | Changes the current browser's local camera | Returns the item that actually received focus |
 
-JSON Schema инструментов происходит из тех же схем `core`, что проверяют команды
-приложения. Инструмент не выдаёт cookie, join token или ключ объекта. После мутации
-агент может повторно вызвать inspect и сравнить ревизию, вместо того чтобы считать
-успехом сам факт вызова.
+Tool JSON Schemas come from the same `core` schemas that validate application
+commands. A tool returns no cookie, join token, or object-store key. After a
+mutation, the agent can inspect again and compare revisions rather than treating
+the tool call itself as proof of success.
 
-## 14. Развёртывание
+## 14. Deployment
 
-Начальная production-топология помещается в Docker Compose на одном сервере, но
-резервная копия покидает этот сервер:
+The initial production topology fits in Docker Compose on one server, while its
+backup leaves that server:
 
 ```text
 Internet
@@ -430,150 +430,151 @@ Internet
 foldthink app ----------------> external asset bucket
 ```
 
-Caddy завершает TLS, отдаёт статический PWA и проксирует same-origin API и
-WebSocket. Контейнер PostgreSQL доступен только внутренней сети. Миграции являются
-последовательными, проверяются на чистой базе и выполняются отдельным release step.
+Caddy terminates TLS, serves the static PWA, and proxies the same-origin API and
+WebSocket. The PostgreSQL container is available only on the private network.
+Migrations are ordered, tested against a clean database, and run as a separate
+release step.
 
-pgBackRest архивирует WAL и полные/инкрементальные копии во внешнее объектное
-хранилище, чтобы дать point-in-time recovery. Проверка наличия файла не считается
-проверкой резервной копии: release readiness включает восстановление в чистый
-PostgreSQL, запуск миграций совместимости и открытие реальной рабочей области.
-Фактически измеренные RPO и RTO становятся публичными эксплуатационными целями.
+pgBackRest archives WAL and full/incremental backups to external object storage to
+provide point-in-time recovery. The presence of a backup file does not prove
+recoverability: release readiness includes restoring into a clean PostgreSQL
+instance, running compatibility migrations, and opening a real workspace. Measured
+RPO and RTO then become the published operational targets.
 
-Собственный PostgreSQL выбран потому, что сервер Foldthink уже обязан владеть
-анонимными capability-сессиями, идемпотентными многоповерхностными операциями и
-особым live/durable протоколом. Supabase Auth, Realtime и прямой клиент к базе
-создали бы параллельных владельцев, которыми продукт не пользуется. Схема остаётся
-обычным PostgreSQL и переносимым SQL, поэтому при росте операционной нагрузки базу
-можно перенести к managed PostgreSQL без изменения браузерной или доменной модели.
+Foldthink owns PostgreSQL because its server already has to own anonymous
+capability sessions, idempotent multi-surface operations, and the product-specific
+live/durable protocol. Supabase Auth, Realtime, and a direct database client would
+create parallel owners that the product does not use. The schema remains standard
+PostgreSQL with portable SQL, so the database can move to a managed PostgreSQL
+provider without changing the browser or domain model when operational load grows.
 
-## 15. Безопасность
+## 15. Security
 
-Безопасность следует тем же владельцам:
+Security follows the same owners:
 
-1. Caddy даёт TLS и единый origin для PWA, API и WebSocket.
-2. `SessionService` использует защищённую cookie, ротацию, отзыв и только хэши
-   секретов в базе.
-3. HTTP-мутации и WebSocket upgrade проверяют `Origin`, сессию, членство и роль.
-4. Все команды проверяются общей JSON Schema, доменными инвариантами, лимитами
-   размера и rate limits до записи.
-5. CSP ограничивает источники кода, frames, соединения и assets.
-6. Агентский JavaScript исполняется в отдельном origin с sandbox и общается через
-   узкий протокол сообщений.
-7. Вложения проходят проверку размера, MIME и checksum; пользователь получает
-   scoped URL, а не ключ хранилища.
-8. Логи содержат идентификаторы, ревизии, длительности и классы ошибок, а
-   пользовательский текст и секреты остаются внутри своих хранилищ.
-9. Рабочая область приватна по умолчанию. Передача доступа всегда создаёт явную
-   возможность с ролью и сроком.
+1. Caddy provides TLS and one origin for the PWA, API, and WebSocket.
+2. `SessionService` uses a protected cookie, rotation, revocation, and only secret
+   hashes in the database.
+3. HTTP mutations and the WebSocket upgrade validate `Origin`, session, membership,
+   and role.
+4. Every command passes the shared JSON Schema, domain invariants, size limits, and
+   rate limits before it is stored.
+5. CSP restricts sources for code, frames, connections, and assets.
+6. Agent-generated JavaScript runs on a separate origin in a sandbox and uses a
+   narrow message protocol.
+7. Attachments pass size, MIME, and checksum validation; the user receives a scoped
+   URL rather than a storage key.
+8. Logs contain IDs, revisions, durations, and error classes, while user text and
+   secrets remain inside their respective stores.
+9. A workspace is private by default. Sharing always creates an explicit capability
+   with a role and expiration.
 
-## 16. Наблюдаемость и восстановление
+## 16. Observability and recovery
 
-| Сигнал | Что он показывает | Действие при нарушении |
+| Signal | What it reveals | Response when it fails |
 |---|---|---|
-| Input-to-frame latency | Не попали ли React, сеть или тяжёлая геометрия в горячий путь | Профилировать Canvas runtime и пространственный индекс |
-| Commit ack p50/p95/p99 | Сколько ждёт долговечное подтверждение | Разделить сеть, очередь event loop и PostgreSQL transaction time |
-| Oldest outbox age | Есть ли пользовательские действия без серверной копии | Показать статус и чинить доставку до масштабирования |
-| Active/reconnecting WebSockets | Стабильность realtime-канала | Проверить proxy timeouts, heartbeat и backoff |
-| Update/snapshot size | Нужна ли компакция поверхности | Запустить ограниченную snapshot compaction |
-| PostgreSQL errors and saturation | Здоровье владельца долговечности | Остановить опасные записи и восстановить ресурс |
-| Last WAL archive and backup | Свежесть внешней копии | Блокировать release при просрочке |
-| Last clean restore drill | Является ли backup восстановлением | Исправить процедуру до обещаний пользователю |
+| Input-to-frame latency | Whether React, the network, or heavy geometry entered the hot path | Profile the Canvas runtime and spatial index |
+| Commit acknowledgement p50/p95/p99 | How long durable acknowledgement takes | Separate network, event-loop queue, and PostgreSQL transaction time |
+| Oldest outbox age | Whether user actions lack a server copy | Show status and repair delivery before scaling |
+| Active/reconnecting WebSockets | Stability of the realtime channel | Check proxy timeouts, heartbeat, and backoff |
+| Update/snapshot size | Whether a surface needs compaction | Run bounded snapshot compaction |
+| PostgreSQL errors and saturation | Health of the durability owner | Pause unsafe writes and restore capacity |
+| Last WAL archive and backup | Freshness of the offsite copy | Block release when overdue |
+| Last clean restore drill | Whether the backup is actually recoverable | Repair the procedure before making a user promise |
 
-Health endpoint доказывает, что процесс жив. Readiness endpoint доказывает, что он
-может проверить миграции и выполнить короткий запрос к PostgreSQL. Отдельный
-синтетический сценарий создаёт временную поверхность, записывает операцию, читает
-её по WebSocket и удаляет рабочую область.
+The health endpoint proves that the process is alive. The readiness endpoint proves
+that it can verify migrations and issue a short PostgreSQL query. A separate
+synthetic scenario creates a temporary surface, writes an operation, reads it over
+WebSocket, and deletes the workspace.
 
-## 17. Проверка архитектурных контрактов
+## 17. Verification of architectural contracts
 
-Архитектура считается исполненной только через наблюдаемые сценарии.
+The architecture is fulfilled only through observable scenarios.
 
-### Модель и хранение
+### Model and storage
 
-- Property tests переставляют и повторяют CRDT updates и получают одинаковую
-  сцену.
-- Повтор одного `operationId` возвращает прежнюю квитанцию и одну мутацию.
-- Снимок плюс updates после его ревизии восстанавливают точное состояние.
-- Удаление и стирание сохраняются после выхода, перезагрузки и подключения старого
-  клиента.
-- Создание тетради либо регистрирует все поверхности и manifest update, либо не
-  подтверждается целиком.
+- Property tests reorder and repeat CRDT updates and obtain the same scene.
+- Repeating one `operationId` returns the original receipt and one mutation.
+- A snapshot plus updates after its revision reconstructs the exact state.
+- Deletion and erasure persist after exit, reload, and connection of a stale client.
+- Notebook creation either registers every surface and the manifest update, or the
+  operation receives no acknowledgement.
 
-### Браузер
+### Browser
 
-- Playwright видит canvas первым кадром без блокирующей регистрации.
-- Рисунок, сделанный до ответа bootstrap API, переживает reload и позже получает
-  серверную ревизию.
-- Два browser context синхронизируют штрих live, а после reload читают durable
-  версию.
-- Офлайн-изменение доставляется после reconnect без дубля.
-- Рисунок обложки остаётся внутри transform тетради при движении и масштабе.
-- Resize и смена `devicePixelRatio` сохраняют геометрию и пропорции.
-- Доска и тетрадная страница сохраняют разные материалы.
-- Переход щипком всегда заканчивается доской или открытым предметом.
+- Playwright sees the canvas in the first frame without blocking registration.
+- A drawing made before the bootstrap API responds survives reload and later
+  receives a server revision.
+- Two browser contexts synchronize a stroke live and read the durable version after
+  reload.
+- An offline change is delivered once after reconnect.
+- Cover ink remains inside the notebook transform during movement and scaling.
+- Resize and a `devicePixelRatio` change preserve geometry and proportions.
+- The board and notebook page retain different visual materials.
+- A pinch transition always settles on the board or inside an open item.
 
-### Агент и документы
+### Agent and documents
 
-- WebMCP patch возвращает ревизию, которую затем видят оба устройства.
-- Inspect после patch подтверждает конкретные `changedIds`.
-- Двойной тап меняет исходник Markdown/LaTeX, а preview пересобирается из него.
-- Widget iframe не читает cookie, parent DOM или сессионные API.
-- Tectonic job соблюдает лимит времени, памяти, сети и размера результата.
+- A WebMCP patch returns a revision that both devices then observe.
+- Inspection after a patch confirms the specific `changedIds`.
+- A double-tap changes Markdown/LaTeX source, and the preview rebuilds from it.
+- A widget iframe cannot read cookies, the parent DOM, or session APIs.
+- A Tectonic job obeys time, memory, network, and output-size limits.
 
 ### Production
 
-- Контракт проходит на настоящем iPad Safari с Apple Pencil и на Mac, а не только
-  в симуляторе.
-- Чистый PostgreSQL восстанавливается из внешней копии до проверяемой ревизии.
-- Развёрнутый exact commit отвечает readiness и проходит синтетический sync-путь.
+- The contract passes on a physical iPad in Safari with Apple Pencil and on a Mac,
+  not only in a simulator.
+- A clean PostgreSQL instance restores from an offsite backup to a verifiable
+  revision.
+- The deployed exact commit answers readiness and passes the synthetic sync path.
 
-## 18. Порядок реализации
+## 18. Implementation order
 
-Каждый этап заканчивается работающим вертикальным срезом:
+Every stage ends with a working vertical slice:
 
-1. **Local surface.** PWA сразу открывает доску, Canvas 2D рисует один штрих,
-   `WorkspaceRuntime` сохраняет его в одном IndexedDB.
-2. **Durable sync.** Анонимная сессия, PostgreSQL, idempotent operation, WebSocket,
-   ack, reload, offline outbox и два браузера проходят end-to-end.
-3. **Spatial workspace.** Манифест, тетрадь, документ, поверхности, перемещение,
-   стопки и управляемый щипком переход используют одну систему координат.
-4. **Ink completeness.** Давление, ластик, undo, resize и Pencil проходят
-   физическое тестирование.
-5. **Agent loop.** Inspect и patch используют тот же dispatcher и подтверждают
-   результат ревизией.
-6. **Rich document.** Markdown, KaTeX, ограниченный Tectonic и sandboxed widgets
-   продолжают ту же модель блоков.
-7. **Public readiness.** CSP, лимиты, мониторинг, WAL archive, clean restore и
-   удаление данных проходят release court.
+1. **Local surface.** The PWA opens directly to the board, Canvas 2D draws one
+   stroke, and `WorkspaceRuntime` stores it in one IndexedDB.
+2. **Durable sync.** Anonymous session, PostgreSQL, idempotent operation,
+   WebSocket, acknowledgement, reload, offline outbox, and two browsers pass
+   end-to-end.
+3. **Spatial workspace.** Manifest, notebook, document, surfaces, movement, stacks,
+   and the pinch-controlled transition use one coordinate system.
+4. **Ink completeness.** Pressure, eraser, undo, resize, and Pencil pass physical
+   device testing.
+5. **Agent loop.** Inspection and patching use the same dispatcher and verify the
+   result by revision.
+6. **Rich document.** Markdown, KaTeX, restricted Tectonic, and sandboxed widgets
+   extend the same block model.
+7. **Public readiness.** CSP, limits, monitoring, WAL archiving, a clean restore,
+   and data deletion pass the release gate.
 
-Порядок удерживает главный риск в центре: сначала человек и агент должны надёжно
-видеть одну сохранённую поверхность. Богатство документа добавляется поверх уже
-доказанного контура, а не маскирует его.
+This order keeps the primary risk in the center: the person and the agent must first
+see one reliably stored surface. Document richness is added on top of a proven loop
+rather than hiding an unreliable one.
 
-## 19. Правила эволюции
+## 19. Evolution rules
 
-Архитектура меняется по измеренному следствию:
+The architecture changes in response to a measured consequence:
 
-| Наблюдение | Следующее допустимое решение |
+| Observation | Next admissible decision |
 |---|---|
-| Canvas 2D не выдерживает измеренный frame budget на целевых устройствах | Перенести renderer в WebGL/WebGPU, сохранив `SceneDocument` и команды |
-| Один realtime-процесс исчерпал измеренную сеть или CPU | Разделить комнаты между процессами и добавить минимальную шину доставки |
-| Эксплуатация базы стала главным риском | Перенести ту же схему и backup contract в managed PostgreSQL |
-| Snapshot compaction мешает пользовательским commit | Вынести compaction в worker, оставив PostgreSQL владельцем результата |
-| Поиск по многим рабочим областям стал продуктовым сценарием | Добавить пересобираемый projection index, оставив сцену источником смысла |
+| Canvas 2D misses the measured frame budget on target devices | Move rendering to WebGL/WebGPU while preserving `SceneDocument` and commands |
+| One realtime process exhausts measured network or CPU capacity | Partition rooms across processes and add the smallest delivery bus that works |
+| Database operations become the primary risk | Move the same schema and backup contract to managed PostgreSQL |
+| Snapshot compaction interferes with user commits | Move compaction to a worker while PostgreSQL remains the result owner |
+| Search across many workspaces becomes a product scenario | Add a rebuildable projection index while the scene remains the source of meaning |
 
-Стартовая система состоит из одного приложения, прямого WebSocket-пути и
-PostgreSQL. Redis, Kafka, Kubernetes, отдельный auth-сервис или новый бинарный
-протокол получают место только вместе с измерением, которое требует нового
-владельца. Такая граница сохраняет первую систему маленькой и оставляет ей ясный
-путь роста.
+The initial system consists of one application, a direct WebSocket path, and
+PostgreSQL. Redis, Kafka, Kubernetes, a separate authentication service, or a new
+binary protocol earn a place only when a measurement requires a new owner. This
+boundary keeps the first system small and gives it a clear growth path.
 
-Изменение считается архитектурным, если оно переносит владельца состояния,
-добавляет новый долговечный источник или меняет квитанцию действия. Такое изменение
-сначала обновляет этот документ и проверяемый контракт, затем код.
+A change is architectural when it moves the owner of state, adds a durable source,
+or changes an action receipt. Such a change updates this document and its
+verifiable contract before it changes the code.
 
-## 20. Нормативные источники
+## 20. Normative references
 
 - [OpenAI WebMCP](https://learn.chatgpt.com/docs/webmcp)
 - [Yjs documentation](https://docs.yjs.dev/)
