@@ -1,6 +1,7 @@
 import type {
   AnonymousBootstrapRequest,
   AnonymousBootstrapResponse,
+  SessionRole,
 } from "@foldthink/identity/protocol";
 import {
   LocalWorkspaceStore,
@@ -9,6 +10,7 @@ import {
 import type { WorkspaceRuntime } from "@foldthink/workspace";
 import type {
   CommittedOperation,
+  CommittedReceipt,
   SyncServerMessage,
   WorkspaceState,
 } from "./committed-receipt.js";
@@ -31,6 +33,13 @@ class SyncRequestError extends Error {
     super(message);
   }
 }
+
+type ReceiptWaiter = Readonly<{
+  resolve(receipt: CommittedReceipt | undefined): void;
+  timeout: ReturnType<typeof setTimeout>;
+  signal?: AbortSignal;
+  abort?: () => void;
+}>;
 
 export type SyncClientOptions = Readonly<{
   runtime: WorkspaceRuntime;
@@ -59,6 +68,12 @@ export class SyncClient {
   #flushRequested = false;
   #flushInFlight: Promise<void> | undefined;
   #stopOutboxObservation: (() => void) | undefined;
+  #role: SessionRole | undefined;
+  readonly #surfaceRevisions = new Map<string, number>();
+  readonly #committedReceipts = new Map<string, CommittedReceipt>();
+  readonly #receiptWaiters = new Map<string, Set<ReceiptWaiter>>();
+  readonly #roleReady: Promise<SessionRole>;
+  #resolveRole: ((role: SessionRole) => void) | undefined;
 
   constructor(options: SyncClientOptions) {
     this.#runtime = options.runtime;
@@ -68,6 +83,9 @@ export class SyncClient {
     this.#fetch = options.fetch ?? fetch;
     this.#createWebSocket = options.createWebSocket ?? ((url) => new WebSocket(url));
     this.#baseUrl = options.baseUrl ?? "";
+    this.#roleReady = new Promise((resolve) => {
+      this.#resolveRole = resolve;
+    });
   }
 
   start(): void {
@@ -88,6 +106,75 @@ export class SyncClient {
     this.#retryTimer = undefined;
     this.#socket?.close(1000, "Foldthink page closed");
     this.#socket = undefined;
+    for (const operationId of this.#receiptWaiters.keys()) this.#settleReceipt(operationId, undefined);
+  }
+
+  currentRole(): SessionRole | undefined {
+    return this.#role;
+  }
+
+  canEdit(): boolean {
+    return this.#role === "owner" || this.#role === "editor";
+  }
+
+  async authorizeEdit(signal?: AbortSignal, timeoutMilliseconds = 8_000): Promise<boolean> {
+    signal?.throwIfAborted();
+    if (this.#role) return this.canEdit();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let abort: (() => void) | undefined;
+    try {
+      const role = await Promise.race<SessionRole | undefined>([
+        this.#roleReady,
+        new Promise((resolve) => {
+          timeout = setTimeout(() => resolve(undefined), timeoutMilliseconds);
+        }),
+        ...(signal ? [new Promise<never>((_resolve, reject) => {
+          abort = () => reject(signal.reason ?? new DOMException("The tool call was aborted.", "AbortError"));
+          signal.addEventListener("abort", abort as EventListener, { once: true });
+        })] : []),
+      ]);
+      return role === "owner" || role === "editor";
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      if (abort && signal) signal.removeEventListener("abort", abort as EventListener);
+    }
+  }
+
+  surfaceRevision(surfaceId: string): number | undefined {
+    return this.#surfaceRevisions.get(surfaceId);
+  }
+
+  waitForCommittedReceipt(
+    operationId: string,
+    timeoutMilliseconds = 8_000,
+    signal?: AbortSignal,
+  ): Promise<CommittedReceipt | undefined> {
+    signal?.throwIfAborted();
+    const committed = this.#committedReceipts.get(operationId);
+    if (committed) return Promise.resolve(committed);
+    if (!Number.isFinite(timeoutMilliseconds) || timeoutMilliseconds < 1 || timeoutMilliseconds > 30_000) {
+      throw new RangeError("A committed-receipt wait lasts between 1 ms and 30 seconds.");
+    }
+    return new Promise((resolve, reject) => {
+      const waiters = this.#receiptWaiters.get(operationId) ?? new Set<ReceiptWaiter>();
+      const settleTimeout = (): void => {
+        this.#removeWaiter(operationId, waiter);
+        resolve(undefined);
+      };
+      const abort = signal ? (): void => {
+        this.#removeWaiter(operationId, waiter);
+        reject(signal.reason ?? new DOMException("The tool call was aborted.", "AbortError"));
+      } : undefined;
+      const waiter: ReceiptWaiter = Object.freeze({
+        resolve,
+        timeout: setTimeout(settleTimeout, timeoutMilliseconds),
+        ...(signal ? { signal } : {}),
+        ...(abort ? { abort } : {}),
+      });
+      waiters.add(waiter);
+      this.#receiptWaiters.set(operationId, waiters);
+      signal?.addEventListener("abort", abort as EventListener, { once: true });
+    });
   }
 
   async synchronizeOnce(): Promise<void> {
@@ -100,6 +187,7 @@ export class SyncClient {
     );
     this.#advanceCursor(state.cursor);
     for (const surface of state.surfaces) {
+      this.#surfaceRevisions.set(surface.surfaceId, surface.revision);
       await this.#runtime.acceptRemoteState(surface.surfaceId, decodeBytes(surface.state));
     }
     await this.#openSocket();
@@ -122,6 +210,9 @@ export class SyncClient {
     if (response.workspaceId !== this.#identity.workspaceId) {
       throw new Error("The server returned a different workspace identity.");
     }
+    this.#role = response.role;
+    this.#resolveRole?.(response.role);
+    this.#resolveRole = undefined;
   }
 
   #requestFlush(): Promise<void> {
@@ -161,6 +252,7 @@ export class SyncClient {
           throw error;
         }
         await this.#store.acknowledge(this.#identity.workspaceId, committed.receipt);
+        this.#recordCommittedReceipt(committed.receipt);
         this.#advanceCursor(committed.sequence);
         this.#onStatus("shared");
       }
@@ -238,6 +330,7 @@ export class SyncClient {
       await this.#runtime.acceptRemoteState(update.surfaceId, update.payload);
     }
     await this.#store.acknowledge(this.#identity.workspaceId, message.operation.receipt);
+    this.#recordCommittedReceipt(message.operation.receipt);
     this.#advanceCursor(message.operation.sequence);
     this.#onStatus("shared");
   }
@@ -283,4 +376,38 @@ export class SyncClient {
       this.#cursor = candidate;
     }
   }
+
+  #recordCommittedReceipt(receipt: CommittedReceipt): void {
+    const existing = this.#committedReceipts.get(receipt.operationId);
+    if (existing && stableReceipt(existing) !== stableReceipt(receipt)) {
+      throw new Error("One operation received conflicting committed receipts.");
+    }
+    this.#committedReceipts.set(receipt.operationId, receipt);
+    for (const surface of receipt.surfaces) {
+      const current = this.#surfaceRevisions.get(surface.surfaceId) ?? 0;
+      if (surface.revision >= current) this.#surfaceRevisions.set(surface.surfaceId, surface.revision);
+    }
+    this.#settleReceipt(receipt.operationId, receipt);
+  }
+
+  #settleReceipt(operationId: string, receipt: CommittedReceipt | undefined): void {
+    for (const waiter of this.#receiptWaiters.get(operationId) ?? []) {
+      clearTimeout(waiter.timeout);
+      if (waiter.abort && waiter.signal) waiter.signal.removeEventListener("abort", waiter.abort as EventListener);
+      waiter.resolve(receipt);
+    }
+    this.#receiptWaiters.delete(operationId);
+  }
+
+  #removeWaiter(operationId: string, waiter: ReceiptWaiter): void {
+    clearTimeout(waiter.timeout);
+    if (waiter.abort && waiter.signal) waiter.signal.removeEventListener("abort", waiter.abort as EventListener);
+    const waiters = this.#receiptWaiters.get(operationId);
+    waiters?.delete(waiter);
+    if (waiters?.size === 0) this.#receiptWaiters.delete(operationId);
+  }
+}
+
+function stableReceipt(receipt: CommittedReceipt): string {
+  return JSON.stringify(receipt);
 }

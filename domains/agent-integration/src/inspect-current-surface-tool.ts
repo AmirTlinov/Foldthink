@@ -49,12 +49,16 @@ function inspectElement(element: SceneElement): Readonly<Record<string, unknown>
 export function inspectCurrentSurface(
   workspaceId: string,
   snapshot: SurfaceSnapshot,
+  committedRevision?: number,
 ): Readonly<Record<string, unknown>> {
   const visibleElements = snapshot.elements.slice(0, 32).map(inspectElement);
   return Object.freeze({
     workspaceId,
     surfaceId: snapshot.surfaceId,
-    revision: opaqueRevision(snapshot.stateVector),
+    revision: Object.freeze({
+      local: opaqueRevision(snapshot.stateVector),
+      ...(committedRevision === undefined ? {} : { committed: committedRevision }),
+    }),
     elementCount: snapshot.elements.length,
     elements: Object.freeze(visibleElements),
     truncated: snapshot.elements.length > visibleElements.length,

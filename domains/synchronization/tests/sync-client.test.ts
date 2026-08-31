@@ -95,6 +95,8 @@ test("a typed rejection restores committed state and rebases an independent oper
     baseUrl: "https://foldthink.test",
     createWebSocket: () => new OpenSocket() as WebSocket,
   });
+  const authorization = client.authorizeEdit(undefined, 1_000);
+  const committedReceipt = client.waitForCommittedReceipt(retained.operationId, 1_000);
   client.start();
   try {
     await eventually(async () => {
@@ -102,6 +104,8 @@ test("a typed rejection restores committed state and rebases an independent oper
     });
     const loaded = await store.loadWorkspace(identity);
     assert.deepEqual(posted, [rejected.operationId, retained.operationId]);
+    assert.equal(await authorization, true);
+    assert.equal((await committedReceipt)?.surfaces[0]?.revision, 1);
     assert.deepEqual(runtime.inspect("board").elements.map((element) => element.id), ["retained"]);
     assert.equal(loaded.receipts.find((record) => record.operationId === rejected.operationId)?.receipt.syncState, "rejected");
     assert.equal(loaded.receipts.find((record) => record.operationId === retained.operationId)?.receipt.syncState, "committed");

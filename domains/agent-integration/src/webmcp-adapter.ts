@@ -1,4 +1,4 @@
-import type { WorkspaceRuntime } from "@foldthink/workspace";
+import type { CommandReceipt, WorkspaceRuntime } from "@foldthink/workspace";
 import { applySurfacePatch } from "./apply-surface-patch-tool.js";
 import { inspectCurrentSurface } from "./inspect-current-surface-tool.js";
 import {
@@ -12,6 +12,13 @@ import {
 export type AgentPageContext = Readonly<{
   runtime: WorkspaceRuntime;
   visibleSurfaceId: string;
+  authorizeEdit(signal?: AbortSignal): Promise<boolean>;
+  committedRevision(surfaceId: string): number | undefined;
+  waitForCommittedReceipt(
+    operationId: string,
+    timeoutMilliseconds: number,
+    signal?: AbortSignal,
+  ): Promise<CommandReceipt | undefined>;
 }>;
 
 export class WebMCPAdapter {
@@ -69,7 +76,11 @@ export class WebMCPAdapter {
           }
           const current = this.#currentContext();
           const surfaceId = requestedSurface ?? current.visibleSurfaceId;
-          return inspectCurrentSurface(current.runtime.workspaceId, current.runtime.inspect(surfaceId));
+          return inspectCurrentSurface(
+            current.runtime.workspaceId,
+            current.runtime.inspect(surfaceId),
+            current.committedRevision(surfaceId),
+          );
         },
       }),
       Object.freeze({
@@ -82,17 +93,26 @@ export class WebMCPAdapter {
           context?: SiteToolExecutionContext,
         ): Promise<unknown> => {
           const current = this.#currentContext();
+          if (!await current.authorizeEdit(context?.signal)) {
+            throw new DOMException("This Foldthink session does not have edit access.", "NotAllowedError");
+          }
           const receipt = await applySurfacePatch(
             current.runtime,
             current.visibleSurfaceId,
             input,
             context?.signal,
           );
+          const committed = await current.waitForCommittedReceipt(
+            receipt.operationId,
+            8_000,
+            context?.signal,
+          );
+          const result = committed ?? receipt;
           return Object.freeze({
-            operationId: receipt.operationId,
-            changedIds: receipt.changedIds,
-            surfaces: receipt.surfaces,
-            syncState: receipt.syncState,
+            operationId: result.operationId,
+            changedIds: result.changedIds,
+            surfaces: result.surfaces,
+            syncState: result.syncState,
           });
         },
       }),

@@ -57,11 +57,6 @@ export async function composeWebRuntime(
     viewport,
     onCommitError: () => onStatus("This stroke is visible but could not be saved"),
   });
-  const webmcp = new WebMCPAdapter(() => ({
-    runtime,
-    visibleSurfaceId: surfaceId,
-  }));
-  void webmcp.register().catch(() => undefined);
   const sync = new SyncClient({
     runtime,
     store,
@@ -73,6 +68,15 @@ export async function composeWebRuntime(
       else onStatus("Saved locally, waiting to share");
     },
   });
+  const webmcp = new WebMCPAdapter(() => ({
+    runtime,
+    visibleSurfaceId: surfaceId,
+    authorizeEdit: (signal) => sync.authorizeEdit(signal),
+    committedRevision: (requestedSurfaceId) => sync.surfaceRevision(requestedSurfaceId),
+    waitForCommittedReceipt: (operationId, timeoutMilliseconds, signal) =>
+      sync.waitForCommittedReceipt(operationId, timeoutMilliseconds, signal),
+  }));
+  void webmcp.register().catch(() => undefined);
   sync.start();
 
   if (import.meta.env.PROD && "serviceWorker" in navigator) {

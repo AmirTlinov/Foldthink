@@ -27,7 +27,13 @@ function runtime(): WorkspaceRuntime {
 test("unsupported browsers keep the human runtime untouched", async () => {
   const workspace = runtime();
   const adapter = new WebMCPAdapter(
-    () => ({ runtime: workspace, visibleSurfaceId: "board" }),
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => true,
+      committedRevision: () => undefined,
+      waitForCommittedReceipt: async () => undefined,
+    }),
     {} as WebMcpDocument,
   );
   assert.equal(await adapter.register(), false);
@@ -38,7 +44,13 @@ test("registered mutation and inspection use the same workspace runtime", async 
   const workspace = runtime();
   const tools = new Map<string, SiteToolDefinition>();
   const adapter = new WebMCPAdapter(
-    () => ({ runtime: workspace, visibleSurfaceId: "board" }),
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => true,
+      committedRevision: () => undefined,
+      waitForCommittedReceipt: async () => undefined,
+    }),
     {
       modelContext: {
         registerTool(tool): void {
@@ -78,4 +90,93 @@ test("registered mutation and inspection use the same workspace runtime", async 
   if (!inspect) throw new Error("inspect_surface was not registered.");
   const inspected = (await inspect.execute({})) as { elements: { id: string }[] };
   assert.equal(inspected.elements[0]?.id, "agent-note");
+});
+
+test("a committed mutation reports the server revision owned by synchronization", async () => {
+  const workspace = runtime();
+  const tools = new Map<string, SiteToolDefinition>();
+  let operationId = "";
+  const adapter = new WebMCPAdapter(
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => true,
+      committedRevision: () => 7,
+      waitForCommittedReceipt: async (id) => {
+        operationId = id;
+        return {
+          operationId: id,
+          changedIds: ["agent-shape"],
+          surfaces: [{ surfaceId: "board", revision: 7 }],
+          syncState: "committed",
+        };
+      },
+    }),
+    {
+      modelContext: {
+        registerTool(tool): void {
+          tools.set(tool.name, tool);
+        },
+      },
+    } as WebMcpDocument,
+  );
+  await adapter.register();
+  const patch = tools.get("patch_surface");
+  if (!patch) throw new Error("patch_surface was not registered.");
+  const result = await patch.execute({
+    changes: [{
+      action: "put",
+      element: {
+        id: "agent-shape",
+        kind: "shape",
+        version: 1,
+        shape: "rectangle",
+        x: 20,
+        y: 20,
+        width: 100,
+        height: 70,
+        stroke: "#171714",
+        strokeWidth: 2,
+      },
+    }],
+  }) as { operationId: string; syncState: string; surfaces: { revision?: number }[] };
+  assert.equal(result.operationId, operationId);
+  assert.equal(result.syncState, "committed");
+  assert.equal(result.surfaces[0]?.revision, 7);
+
+  const inspect = tools.get("inspect_surface");
+  if (!inspect) throw new Error("inspect_surface was not registered.");
+  const inspected = await inspect.execute({}) as { revision: { committed?: number } };
+  assert.equal(inspected.revision.committed, 7);
+});
+
+test("a viewer can inspect but cannot dispatch an agent mutation", async () => {
+  const workspace = runtime();
+  const tools = new Map<string, SiteToolDefinition>();
+  const adapter = new WebMCPAdapter(
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => false,
+      committedRevision: () => 1,
+      waitForCommittedReceipt: async () => undefined,
+    }),
+    {
+      modelContext: {
+        registerTool(tool): void {
+          tools.set(tool.name, tool);
+        },
+      },
+    } as WebMcpDocument,
+  );
+  await adapter.register();
+  const patch = tools.get("patch_surface");
+  const inspect = tools.get("inspect_surface");
+  if (!patch || !inspect) throw new Error("Foldthink agent tools were not registered.");
+  await assert.rejects(
+    patch.execute({ changes: [] }),
+    { name: "NotAllowedError" },
+  );
+  assert.equal(workspace.inspect("board").elements.length, 0);
+  assert.ok(await inspect.execute({}));
 });
