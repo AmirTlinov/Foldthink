@@ -31,7 +31,7 @@ commitLocal(operation, surfaceUpdates, localReceipt)
 acknowledge(operationId, committedReceipt)
 reject(operationId, rejectedReceipt, repairedSurfaceStates, survivingOutbox)
 loadWorkspace(workspaceId)
-remapBootstrapWorkspace(oldId, newId)
+adoptLinkedWorkspace(oldId, newId)
 ```
 
 Only `WorkspaceRuntime` submits a local semantic operation. Only `SyncClient`
@@ -50,8 +50,8 @@ submits a server acknowledgement.
    record in one transaction.
 6. Repeating an acknowledgement is harmless and preserves the highest known
    revisions.
-7. Bootstrap ID remapping changes every local reference atomically before the first
-   remote send.
+7. A blank linked device adopts the authorized workspace identity atomically before
+   the first remote read.
 8. IndexedDB schema migration either opens the new complete schema or leaves the
    previous schema readable by the recovery path.
 9. Rejection installs repaired surface states, the rejected receipt, and the
@@ -84,7 +84,7 @@ Implemented by [local-workspace-store.test.ts](tests/local-workspace-store.test.
 - Reload while offline reconstructs the scene and retains every outbox operation.
 - Repeated acknowledgements leave one receipt and no outbox duplicate.
 - A quota failure never produces a `queued` receipt.
-- A bootstrap remap leaves no reference to the old workspace ID.
+- A blank linked device retains no reference to its unused bootstrap workspace ID.
 - A rejected dependent update cannot reappear after reload from a stale tab.
 
 ## Application-shell boundary

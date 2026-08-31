@@ -1,0 +1,20 @@
+{
+  "name": "@foldthink/identity",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": "./src/public-browser.ts",
+    "./protocol": "./src/public-protocol.ts",
+    "./server": "./src/public-server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

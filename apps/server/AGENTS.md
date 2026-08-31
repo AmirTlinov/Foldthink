@@ -6,10 +6,19 @@ public server entry points from domains. It owns no domain meaning of its own.
 
 ```text
 apps/server/
-|-- AGENTS.md    # Current server composition-root map.
+|-- AGENTS.md                    # Current server composition-root map.
+|-- package.json                 # Server commands and domain dependencies.
+|-- tsconfig.json                # Node composition compiler boundary.
+|-- src/
+|   |-- main.ts                  # HTTP process, lifecycle, and route composition.
+|   |-- server-config.ts         # Required environment and exact release identity.
+|   |-- compose-server-runtime.ts # PostgreSQL and domain owner wiring.
+|   |-- http-boundary.ts         # JSON, cookie, origin, and response mechanics.
+|   |-- identity-http-routes.ts  # Anonymous bootstrap and device-link adapter.
+|   `-- sync-http-routes.ts      # State and durable-operation HTTP adapter.
+`-- tests/
+    `-- server-startup.test.ts   # Required durable configuration proof.
 ```
 
 Allowed imports are enforced by
-[dependency-cruiser.cjs](../../dependency-cruiser.cjs). Server source and its
-startup proof are added here together when the durable-sync slice activates
-this app.
+[dependency-cruiser.cjs](../../dependency-cruiser.cjs).

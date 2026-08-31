@@ -5,10 +5,11 @@
 Foldthink is the public home for a notebook that people and agents can see,
 draw on, and change together.
 
-The first executable slice opens directly to a full-screen canvas, keeps Pencil
-input outside React's render path, and commits each completed stroke atomically to
-IndexedDB. It is intentionally a working local surface before it is a feature
-catalog.
+The executable surface opens without registration, keeps Pointer and Pencil input
+outside React's render path, and commits each completed stroke atomically to
+IndexedDB. When a Foldthink server is available, the same outbox is acknowledged
+by PostgreSQL and delivered to linked browsers. Page-local WebMCP tools inspect and
+patch that exact runtime rather than a second agent-only model.
 
 ## Run locally
 
@@ -20,7 +21,23 @@ pnpm dev
 ```
 
 Open `http://localhost:5173`. Draw with a mouse or Apple Pencil, reload, and the
-same locally durable surface returns. A production PWA build is created with:
+same locally durable surface returns. This path deliberately remains useful while
+the server is unavailable.
+
+To run the shared path, create a PostgreSQL database and start both composition
+roots:
+
+```sh
+export DATABASE_URL=postgresql://localhost/foldthink
+export SESSION_HMAC_KEY='replace-with-at-least-32-random-bytes'
+export PUBLIC_ORIGIN=http://localhost:5173
+export COOKIE_SECURE=false
+pnpm migrate
+pnpm dev:shared
+```
+
+`COOKIE_SECURE=false` exists only for local HTTP. A public deployment uses HTTPS
+and the secure `__Host-` session cookie. A production PWA build is created with:
 
 ```sh
 pnpm build
@@ -50,6 +67,9 @@ repository verification command:
 ```sh
 pnpm verify
 ```
+
+Set `TEST_DATABASE_URL` to a migrated disposable database to run the real
+PostgreSQL idempotency and restore court locally. CI always runs that court.
 
 ## License
 

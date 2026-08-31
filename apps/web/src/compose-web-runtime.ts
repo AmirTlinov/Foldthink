@@ -1,4 +1,5 @@
 import { WebMCPAdapter } from "@foldthink/agent-integration/browser";
+import { consumeJoinCapability } from "@foldthink/identity/browser";
 import {
   CanvasSceneRenderer,
   PointerIntentAdapter,
@@ -6,6 +7,7 @@ import {
 } from "@foldthink/interaction/browser";
 import { LocalWorkspaceStore } from "@foldthink/local-persistence/browser";
 import { SceneDocument } from "@foldthink/surface";
+import { SyncClient } from "@foldthink/synchronization/browser";
 import { WorkspaceRuntime } from "@foldthink/workspace";
 
 export type WebRuntime = Readonly<{
@@ -24,7 +26,18 @@ export async function composeWebRuntime(
     onStatus("A newer Foldthink version is ready. Reloading safely.");
     window.location.reload();
   });
-  const identity = await store.getOrCreateIdentity();
+  let identity = await store.getOrCreateIdentity();
+  const joinToken = new URLSearchParams(location.hash.slice(1)).get("join");
+  if (joinToken) {
+    const current = await store.loadWorkspace(identity);
+    if (current.surfaces.length > 0 || current.outbox.length > 0 || current.receipts.length > 0) {
+      throw new Error("This device already owns local Foldthink work.");
+    }
+    onStatus("Linking this surface");
+    const linkedSession = await consumeJoinCapability(joinToken);
+    identity = await store.adoptLinkedWorkspace(identity, linkedSession.workspaceId);
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+  }
   const loaded = await store.loadWorkspace(identity);
   const surfaceId = "board";
   const savedSurface = loaded.surfaces.find((surface) => surface.surfaceId === surfaceId);
@@ -49,6 +62,18 @@ export async function composeWebRuntime(
     visibleSurfaceId: surfaceId,
   }));
   void webmcp.register().catch(() => undefined);
+  const sync = new SyncClient({
+    runtime,
+    store,
+    identity,
+    onStatus(status): void {
+      if (status === "connecting") onStatus("Connecting this surface");
+      else if (status === "shared") onStatus("Shared");
+      else if (status === "rejected") onStatus("This surface needs a safe reload");
+      else onStatus("Saved locally, waiting to share");
+    },
+  });
+  sync.start();
 
   if (import.meta.env.PROD && "serviceWorker" in navigator) {
     void navigator.serviceWorker.register(
@@ -62,6 +87,7 @@ export async function composeWebRuntime(
     surfaceId,
     runtime,
     destroy(): void {
+      sync.stop();
       void webmcp.destroy().catch(() => undefined);
       stopObserving();
       pointerAdapter.destroy();

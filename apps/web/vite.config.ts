@@ -17,6 +17,12 @@ export default defineConfig({
       "/sync": { target: "ws://localhost:8787", ws: true },
     },
   },
+  preview: {
+    proxy: {
+      "/api": "http://localhost:8787",
+      "/sync": { target: "ws://localhost:8787", ws: true },
+    },
+  },
   build: {
     target: "es2022",
     rollupOptions: {

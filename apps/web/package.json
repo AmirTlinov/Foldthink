@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@foldthink/agent-integration": "workspace:*",
+    "@foldthink/identity": "workspace:*",
     "@foldthink/interaction": "workspace:*",
     "@foldthink/local-persistence": "workspace:*",
     "@foldthink/surface": "workspace:*",
+    "@foldthink/synchronization": "workspace:*",
     "@foldthink/workspace": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"

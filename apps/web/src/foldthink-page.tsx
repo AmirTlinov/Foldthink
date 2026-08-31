@@ -15,7 +15,7 @@ export function FoldthinkPage(): React.JSX.Element {
         if (destroyed) runtime.destroy();
         else destroy = runtime.destroy;
       })
-      .catch(() => setStatus("Foldthink could not open local storage"));
+      .catch(() => setStatus("Foldthink could not open this surface"));
     return () => {
       destroyed = true;
       destroy?.();

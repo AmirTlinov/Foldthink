@@ -74,6 +74,7 @@ async function openDatabase(
 
 export class LocalWorkspaceStore implements WorkspaceCommitSink {
   readonly #database: IDBDatabase;
+  readonly #outboxListeners = new Set<() => void>();
 
   private constructor(database: IDBDatabase) {
     this.#database = database;
@@ -130,6 +131,31 @@ export class LocalWorkspaceStore implements WorkspaceCommitSink {
     });
   }
 
+  async adoptLinkedWorkspace(current: LocalIdentity, workspaceId: string): Promise<LocalIdentity> {
+    const transaction = this.#database.transaction(
+      [stores.meta, stores.surfaces, stores.outbox, stores.receipts],
+      "readwrite",
+    );
+    const completed = transactionDone(transaction);
+    const [surfaces, outbox, receipts] = await Promise.all([
+      requestResult(transaction.objectStore(stores.surfaces).index("workspaceId").count(current.workspaceId)),
+      requestResult(transaction.objectStore(stores.outbox).index("workspaceId").count(current.workspaceId)),
+      requestResult(transaction.objectStore(stores.receipts).index("workspaceId").count(current.workspaceId)),
+    ]);
+    if (surfaces > 0 || outbox > 0 || receipts > 0) {
+      transaction.abort();
+      await completed.catch(() => undefined);
+      throw new LocalStorageError("A device with local work cannot silently adopt another workspace.");
+    }
+    const identity: LocalIdentity = Object.freeze({
+      workspaceId,
+      bootstrapId: current.bootstrapId,
+    });
+    transaction.objectStore(stores.meta).put(identity, "current");
+    await completed;
+    return identity;
+  }
+
   async commitLocal(commit: LocalCommit): Promise<CommandReceipt> {
     const transaction = this.#database.transaction(
       [stores.surfaces, stores.outbox, stores.receipts],
@@ -164,6 +190,7 @@ export class LocalWorkspaceStore implements WorkspaceCommitSink {
     transaction.objectStore(stores.outbox).put(outboxRecord);
     transaction.objectStore(stores.receipts).put(receiptRecord);
     await completed;
+    for (const listener of this.#outboxListeners) listener();
     return queuedReceipt;
   }
 
@@ -203,6 +230,11 @@ export class LocalWorkspaceStore implements WorkspaceCommitSink {
     transaction.objectStore(stores.receipts).put(record);
     await completed;
     return receipt;
+  }
+
+  observeOutbox(listener: () => void): () => void {
+    this.#outboxListeners.add(listener);
+    return () => this.#outboxListeners.delete(listener);
   }
 
   close(): void {

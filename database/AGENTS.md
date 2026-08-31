@@ -5,7 +5,13 @@ domain. This directory owns that order; domain contracts own the meaning.
 
 ```text
 database/
-|-- AGENTS.md    # Current migration-order map.
+|-- AGENTS.md             # Current migration-order map.
+|-- apply-migrations.mjs  # Transactional total-order migration runner.
+|-- migrations/
+    |-- 202608310001_identity__create_anonymous_sessions.sql # Sessions, membership, and one-time linking.
+|   `-- 202608310002_synchronization__create_operation_journal.sql # Ordered CRDT state and receipts.
+`-- tests/
+    `-- migration-chain.test.mjs # Naming, order, and additive-chain proof.
 ```
 
 The first schema change creates `database/migrations/` in the same commit. A

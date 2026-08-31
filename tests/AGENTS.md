@@ -9,7 +9,8 @@ tests/
 |-- AGENTS.md    # Current cross-domain proof map.
 `-- journeys/
     |-- first-stroke-offline-reload.test.ts # PWA, canvas, and IndexedDB journey.
-    `-- webmcp-shared-runtime.test.ts        # Agent patch and visible-page journey.
+    |-- webmcp-shared-runtime.test.ts        # Agent patch and visible-page journey.
+    `-- two-device-sync.test.ts              # Anonymous link, live delivery, and reload journey.
 ```
 
 A test name describes the observed scenario rather than an implementation layer.

@@ -1,0 +1,27 @@
+{
+  "name": "@foldthink/synchronization",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/public-protocol.ts",
+    "./browser": "./src/public-browser.ts",
+    "./server": "./src/public-server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@foldthink/identity": "workspace:*",
+    "@foldthink/local-persistence": "workspace:*",
+    "@foldthink/surface": "workspace:*",
+    "@foldthink/workspace": "workspace:*",
+    "pg": "8.23.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@types/ws": "8.18.1",
+    "fake-indexeddb": "6.2.5"
+  }
+}

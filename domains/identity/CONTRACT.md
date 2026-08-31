@@ -76,6 +76,9 @@ absence remains an honest recovery boundary.
 
 ## Executable proof
 
+The authority-level guarantees are proved by
+[session-authority.test.ts](tests/session-authority.test.ts).
+
 - First visit produces a workspace without a registration screen.
 - Repeating bootstrap returns the same session/workspace relationship.
 - Two concurrent join-token consumptions create one membership.

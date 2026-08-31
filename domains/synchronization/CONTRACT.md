@@ -111,6 +111,12 @@ local data.
 
 ## Executable proof
 
+Gateway semantic validation and idempotency are proved by
+[sync-gateway.test.ts](tests/sync-gateway.test.ts).
+The PostgreSQL transaction and reconstruction path is proved by
+[postgres-operation-journal.test.ts](tests/postgres-operation-journal.test.ts)
+when `TEST_DATABASE_URL` names the migrated verification database.
+
 - Two browser contexts converge after reordered live traffic and durable replay.
 - Retrying one operation concurrently produces one database operation and one set
   of surface revisions.

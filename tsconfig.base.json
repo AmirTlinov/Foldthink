@@ -16,7 +16,13 @@
       "@foldthink/workspace": ["./domains/workspace/src/public.ts"],
       "@foldthink/interaction/browser": ["./domains/interaction/src/public-browser.ts"],
       "@foldthink/local-persistence/browser": ["./domains/local-persistence/src/public-browser.ts"],
-      "@foldthink/agent-integration/browser": ["./domains/agent-integration/src/public-browser.ts"]
+      "@foldthink/agent-integration/browser": ["./domains/agent-integration/src/public-browser.ts"],
+      "@foldthink/identity/browser": ["./domains/identity/src/public-browser.ts"],
+      "@foldthink/identity/protocol": ["./domains/identity/src/public-protocol.ts"],
+      "@foldthink/identity/server": ["./domains/identity/src/public-server.ts"],
+      "@foldthink/synchronization/protocol": ["./domains/synchronization/src/public-protocol.ts"],
+      "@foldthink/synchronization/browser": ["./domains/synchronization/src/public-browser.ts"],
+      "@foldthink/synchronization/server": ["./domains/synchronization/src/public-server.ts"]
     }
   }
 }

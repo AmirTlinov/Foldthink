@@ -63,3 +63,41 @@ test("acknowledgement removes exactly its outbox operation", async () => {
   assert.equal((await store.listOutbox(identity.workspaceId)).length, 0);
   store.close();
 });
+
+test("a blank device adopts a linked workspace atomically", async () => {
+  const store = await LocalWorkspaceStore.open(new IDBFactory());
+  const identity = await store.getOrCreateIdentity();
+  const linked = await store.adoptLinkedWorkspace(
+    identity,
+    "018f355b-cdf6-7ca4-9ca8-64df7c7d2045",
+  );
+  assert.equal((await store.getOrCreateIdentity()).workspaceId, linked.workspaceId);
+  store.close();
+});
+
+test("a durable local commit wakes the delivery owner once", async () => {
+  const store = await LocalWorkspaceStore.open(new IDBFactory());
+  const identity = await store.getOrCreateIdentity();
+  let wakeups = 0;
+  const stop = store.observeOutbox(() => wakeups += 1);
+  const operationId = crypto.randomUUID();
+  await store.commitLocal({
+    operation: {
+      protocolVersion: 1,
+      operationId,
+      workspaceId: identity.workspaceId,
+      intent: { kind: "patchSurface", surfaceId: "board", changes: [] },
+      updates: [{ surfaceId: "board", payload: new Uint8Array([1]) }],
+    },
+    receipt: {
+      operationId,
+      changedIds: ["element"],
+      surfaces: [{ surfaceId: "board" }],
+      syncState: "local",
+    },
+    surfaceStates: [{ surfaceId: "board", state: new Uint8Array([1]) }],
+  });
+  stop();
+  assert.equal(wakeups, 1);
+  store.close();
+});

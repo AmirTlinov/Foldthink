@@ -9,14 +9,17 @@
   },
   "scripts": {
     "dev": "pnpm --filter @foldthink/web dev",
+    "dev:shared": "pnpm --parallel --filter @foldthink/web --filter @foldthink/server dev",
     "build": "pnpm --filter @foldthink/web build",
+    "migrate": "node database/apply-migrations.mjs",
     "lint": "eslint .",
     "verify:map": "node scripts/verify-project-map.mjs",
     "verify:contracts": "node scripts/verify-contract-links.mjs",
+    "verify:migrations": "node --test database/tests/*.test.mjs",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",
     "verify:packages": "pnpm --recursive --if-present --filter '!foldthink' run typecheck && pnpm --recursive --if-present --filter '!foldthink' run test",
     "verify:journeys": "playwright test",
-    "verify": "pnpm verify:map && pnpm verify:contracts && pnpm verify:boundaries && pnpm lint && pnpm verify:packages && pnpm verify:journeys",
+    "verify": "pnpm verify:map && pnpm verify:contracts && pnpm verify:migrations && pnpm verify:boundaries && pnpm lint && pnpm verify:packages && pnpm verify:journeys",
     "test": "pnpm verify"
   },
   "devDependencies": {
@@ -28,6 +31,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.68.0",
     "fake-indexeddb": "6.2.5",
+    "pg": "8.23.0",
     "tsx": "4.23.13"
   }
 }
