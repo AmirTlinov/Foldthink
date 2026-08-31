@@ -24,6 +24,8 @@ export class WebSocketSyncTransport {
   readonly #server = new WebSocketServer({ noServer: true, maxPayload: 1_024 });
   readonly #gateway: SyncGateway;
   readonly #authorize: SyncUpgradeAuthorizer;
+  #acceptedConnections = 0;
+  #rejectedConnections = 0;
 
   constructor(gateway: SyncGateway, authorize: SyncUpgradeAuthorizer) {
     this.#gateway = gateway;
@@ -38,9 +40,11 @@ export class WebSocketSyncTransport {
     try {
       const actor = await this.#authorize(request, workspaceId);
       this.#server.handleUpgrade(request, socket, head, (websocket) => {
+        this.#acceptedConnections += 1;
         this.#accept(websocket, actor, after);
       });
     } catch {
+      this.#rejectedConnections += 1;
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();
     }
@@ -50,6 +54,14 @@ export class WebSocketSyncTransport {
   close(): void {
     for (const client of this.#server.clients) client.close(1001, "Foldthink server stopping");
     this.#server.close();
+  }
+
+  metrics(): Readonly<{ active: number; accepted: number; rejected: number }> {
+    return Object.freeze({
+      active: this.#server.clients.size,
+      accepted: this.#acceptedConnections,
+      rejected: this.#rejectedConnections,
+    });
   }
 
   #accept(socket: WebSocket, actor: AuthorizedSession, after: string): void {

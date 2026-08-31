@@ -20,6 +20,7 @@ export type TectonicProcessCompilerOptions = Readonly<{
   pdfInfoBinary?: string;
   pdfToCairoBinary?: string;
   bundlePath?: string;
+  cacheDirectory?: string;
   version?: string;
   timeoutMilliseconds?: number;
 }>;
@@ -44,6 +45,7 @@ export class TectonicProcessCompiler implements LatexProcessCompiler {
   readonly #pdfInfoBinary: string;
   readonly #pdfToCairoBinary: string;
   readonly #bundlePath: string | undefined;
+  readonly #cacheDirectory: string | undefined;
   readonly #timeoutMilliseconds: number;
 
   constructor(options: TectonicProcessCompilerOptions = {}) {
@@ -52,6 +54,7 @@ export class TectonicProcessCompiler implements LatexProcessCompiler {
     this.#pdfInfoBinary = options.pdfInfoBinary ?? "pdfinfo";
     this.#pdfToCairoBinary = options.pdfToCairoBinary ?? "pdftocairo";
     this.#bundlePath = options.bundlePath;
+    this.#cacheDirectory = options.cacheDirectory;
     this.#timeoutMilliseconds = options.timeoutMilliseconds ?? 12_000;
   }
 
@@ -131,7 +134,10 @@ export class TectonicProcessCompiler implements LatexProcessCompiler {
       command,
       args,
       cwd,
-      environment: { TECTONIC_UNTRUSTED_MODE: "1" },
+      environment: {
+        TECTONIC_UNTRUSTED_MODE: "1",
+        ...(this.#cacheDirectory ? { TECTONIC_CACHE_DIR: this.#cacheDirectory } : {}),
+      },
       timeoutMilliseconds: this.#timeoutMilliseconds,
       maximumOutputBytes: 64_000,
       ...(signal ? { signal } : {}),

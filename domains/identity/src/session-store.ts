@@ -1,4 +1,5 @@
 import type { AuthorizedSession, SessionRole } from "./device-session.js";
+import type { DeleteWorkspaceResponse } from "./session-protocol.js";
 
 export type BootstrapClaim = Readonly<{
   bootstrapHash: Uint8Array;
@@ -32,4 +33,8 @@ export interface SessionStore {
     sessionExpiresAt: Date;
     now: Date;
   }>): Promise<StoredSession | undefined>;
+  deleteWorkspace(
+    actor: AuthorizedSession,
+    backupRetentionDays: number,
+  ): Promise<DeleteWorkspaceResponse>;
 }

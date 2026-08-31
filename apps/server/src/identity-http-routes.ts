@@ -8,6 +8,7 @@ import { IdentityError } from "@foldthink/identity/server";
 import type { ServerRuntime } from "./compose-server-runtime.js";
 import {
   assertOrigin,
+  clearSessionCookie,
   readJson,
   readSessionCookie,
   sendJson,
@@ -15,6 +16,7 @@ import {
 } from "./http-boundary.js";
 
 const workspaceJoinPattern = /^\/api\/workspaces\/([^/]+)\/join-capabilities$/u;
+const workspacePattern = /^\/api\/workspaces\/([^/]+)$/u;
 
 export async function handleIdentityRoute(
   request: IncomingMessage,
@@ -56,6 +58,25 @@ export async function handleIdentityRoute(
       role: session.role,
       expiresAt: session.expiresAt,
     });
+    return true;
+  }
+
+  const workspaceMatch = workspacePattern.exec(url.pathname);
+  if (request.method === "DELETE" && workspaceMatch?.[1]) {
+    assertOrigin(request, runtime.config.publicOrigin);
+    const workspaceId = decodeURIComponent(workspaceMatch[1]);
+    const actor = await runtime.authority.authorize(
+      readSessionCookie(request, runtime.config.secureCookie),
+      workspaceId,
+      "owner",
+    );
+    const deletion = await runtime.authority.deleteWorkspace(
+      actor,
+      runtime.config.backupRetentionDays,
+    );
+    clearSessionCookie(response, runtime.config.secureCookie);
+    sendJson(response, 200, deletion);
+    void runtime.assets.drainDeletionQueue().catch(() => undefined);
     return true;
   }
 

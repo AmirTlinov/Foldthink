@@ -26,3 +26,10 @@ export type JoinCapabilityResponse = Readonly<{
 export type ConsumeJoinCapabilityRequest = Readonly<{
   token: string;
 }>;
+
+export type DeleteWorkspaceResponse = Readonly<{
+  workspaceId: string;
+  deletedAt: string;
+  backupRetentionUntil: string;
+  queuedAssets: number;
+}>;

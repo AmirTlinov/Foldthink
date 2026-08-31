@@ -33,10 +33,19 @@ export type NewDerivedAsset = Readonly<{
   createdBySessionId: string;
 }>;
 
+export type QueuedAssetDeletion = Readonly<{
+  objectKey: string;
+  workspaceId: string;
+  attemptCount: number;
+}>;
+
 export interface AssetStore {
   reserve(input: NewAssetReservation): Promise<StoredAsset>;
   find(workspaceId: string, assetId: string): Promise<StoredAsset | undefined>;
   findReadyDerived(workspaceId: string, derivationKey: string): Promise<StoredAsset | undefined>;
   markState(assetId: string, from: AssetState, to: AssetState): Promise<StoredAsset | undefined>;
   createReadyDerived(input: NewDerivedAsset): Promise<StoredAsset>;
+  claimDeletionBatch(now: Date, leaseUntil: Date, limit: number): Promise<readonly QueuedAssetDeletion[]>;
+  completeDeletion(objectKey: string, completedAt: Date): Promise<void>;
+  failDeletion(objectKey: string, message: string): Promise<void>;
 }

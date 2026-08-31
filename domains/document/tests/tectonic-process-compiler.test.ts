@@ -10,6 +10,7 @@ test("cached untrusted Tectonic produces bounded SVG pages", {
     ...(process.env.PDFINFO_BINARY ? { pdfInfoBinary: process.env.PDFINFO_BINARY } : {}),
     ...(process.env.PDFTOCAIRO_BINARY ? { pdfToCairoBinary: process.env.PDFTOCAIRO_BINARY } : {}),
     ...(process.env.LATEX_BUNDLE_PATH ? { bundlePath: process.env.LATEX_BUNDLE_PATH } : {}),
+    ...(process.env.LATEX_CACHE_DIRECTORY ? { cacheDirectory: process.env.LATEX_CACHE_DIRECTORY } : {}),
   });
   const pages = await compiler.compile(String.raw`\documentclass{article}
 \begin{document}

@@ -10,6 +10,8 @@ export function FoldthinkPage(): React.JSX.Element {
   const [spatial, setSpatial] = useState<SpatialViewState>({ mode: "board" });
   const [creating, setCreating] = useState(false);
   const [toolPanel, setToolPanel] = useState(false);
+  const [deletionPrompt, setDeletionPrompt] = useState(false);
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
   const [drawingTool, setDrawingTool] = useState<DrawingToolState>();
 
   useEffect(() => {
@@ -121,6 +123,16 @@ export function FoldthinkPage(): React.JSX.Element {
               <div className="creation-choices">
                 <button type="button" onClick={() => void create("notebook")}>Notebook</button>
                 <button type="button" onClick={() => void create("document")}>Document</button>
+                <button
+                  type="button"
+                  className="workspace-delete-choice"
+                  onClick={() => {
+                    setCreating(false);
+                    setDeletionPrompt(true);
+                  }}
+                >
+                  Delete workspace
+                </button>
               </div>
             )}
             {selected && (
@@ -138,6 +150,46 @@ export function FoldthinkPage(): React.JSX.Element {
           </>
         )}
       </nav>
+
+      {deletionPrompt && (
+        <div className="workspace-dialog-backdrop">
+          <section
+            className="workspace-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-workspace-title"
+          >
+            <h1 id="delete-workspace-title">Delete this workspace?</h1>
+            <p>
+              The active service and this device will forget every page and mark.
+              Backup copies age out under the published retention policy.
+            </p>
+            <div>
+              <button
+                type="button"
+                disabled={deletingWorkspace}
+                onClick={() => setDeletionPrompt(false)}
+              >
+                Keep it
+              </button>
+              <button
+                type="button"
+                className="confirm-workspace-deletion"
+                disabled={deletingWorkspace}
+                onClick={() => {
+                  setDeletingWorkspace(true);
+                  void runtimeRef.current?.deleteWorkspace().catch(() => {
+                    setDeletingWorkspace(false);
+                    setStatus("This workspace could not be deleted");
+                  });
+                }}
+              >
+                {deletingWorkspace ? "Deleting…" : "Delete everything"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <nav className="drawing-actions" aria-label="Drawing tools">
         <button

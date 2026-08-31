@@ -6,14 +6,19 @@ import type {
   StoredJoinCapability,
   StoredSession,
 } from "../src/session-store.js";
+import type { AuthorizedSession } from "../src/device-session.js";
 import { IdentityError, SessionAuthority } from "../src/public-server.js";
 
 class MemorySessionStore implements SessionStore {
   readonly claims = new Map<string, StoredSession>();
   readonly secrets = new Map<string, StoredSession>();
   readonly joins = new Map<string, StoredJoinCapability>();
+  readonly deleted = new Set<string>();
 
   async claimBootstrap(claim: BootstrapClaim): Promise<StoredSession> {
+    if (this.deleted.has(claim.workspaceId)) {
+      throw Object.assign(new Error("deleted"), { code: "workspace_deleted" });
+    }
     const claimKey = Buffer.from(claim.bootstrapHash).toString("hex");
     const existing = this.claims.get(claimKey);
     if (existing) return existing;
@@ -56,6 +61,25 @@ class MemorySessionStore implements SessionStore {
     this.secrets.set(Buffer.from(input.sessionSecretHash).toString("hex"), session);
     return session;
   }
+
+  async deleteWorkspace(
+    actor: AuthorizedSession,
+    backupRetentionDays: number,
+  ): Promise<Readonly<{
+    workspaceId: string;
+    deletedAt: string;
+    backupRetentionUntil: string;
+    queuedAssets: number;
+  }>> {
+    this.deleted.add(actor.workspaceId);
+    const deletedAt = new Date("2026-08-31T00:00:00.000Z");
+    return Object.freeze({
+      workspaceId: actor.workspaceId,
+      deletedAt: deletedAt.toISOString(),
+      backupRetentionUntil: new Date(deletedAt.getTime() + backupRetentionDays * 86_400_000).toISOString(),
+      queuedAssets: 0,
+    });
+  }
 }
 
 const workspaceId = "018f355b-cdf6-7ca4-9ca8-64df7c7d2045";
@@ -85,5 +109,22 @@ test("a join capability is consumed once and inherits its bounded role", async (
   await assert.rejects(
     authority.consumeJoinCapability(capability.token),
     (error: unknown) => error instanceof IdentityError && error.code === "expired",
+  );
+});
+
+test("only the owner can delete active data and a tombstone prevents resurrection", async () => {
+  const store = new MemorySessionStore();
+  const authority = new SessionAuthority(store, "test-secret-key-with-at-least-32-bytes");
+  const owner = await authority.bootstrap({ workspaceId, bootstrapId });
+  const receipt = await authority.deleteWorkspace(owner, 30);
+  assert.equal(receipt.workspaceId, workspaceId);
+  assert.equal(receipt.backupRetentionUntil, "2026-09-30T00:00:00.000Z");
+  await assert.rejects(
+    authority.bootstrap({ workspaceId, bootstrapId: "b".repeat(64) }),
+    (error: unknown) => error instanceof IdentityError && error.code === "workspace_deleted",
+  );
+  await assert.rejects(
+    authority.deleteWorkspace({ ...owner, role: "editor" }, 30),
+    (error: unknown) => error instanceof IdentityError && error.code === "forbidden",
   );
 });

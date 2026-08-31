@@ -17,9 +17,15 @@ importers:
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       dependency-cruiser:
         specifier: 18.2.0
         version: 18.2.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       eslint:
         specifier: 10.9.1
         version: 10.9.1(supports-color@7.2.0)
@@ -38,6 +44,9 @@ importers:
       typescript-eslint:
         specifier: 8.68.0
         version: 8.68.0(eslint@10.9.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
 
   apps/server:
     dependencies:

@@ -118,7 +118,10 @@ async function linkedPage(source: Page, context: BrowserContext): Promise<Page> 
 }
 
 test("a document keeps editable Markdown, LaTeX, safe widget state, and verified images", async ({ browser, page }) => {
-  test.skip(!process.env.TEST_DATABASE_URL, "TEST_DATABASE_URL is not configured.");
+  test.skip(
+    !process.env.TEST_DATABASE_URL && !process.env.FOLDTHINK_EXTERNAL_BASE_URL,
+    "A shared Foldthink service is not configured.",
+  );
   await installToolCapture(page);
   await page.goto("/");
   await expect(page.getByText("Shared")).toBeVisible({ timeout: 15_000 });
@@ -184,7 +187,7 @@ let count=Number(foldthink.state.count||0);
 let parentBlocked=false;
 try{void parent.document.body}catch{parentBlocked=true}
 result.dataset.parentBlocked=String(parentBlocked);
-result.dataset.origin=location.origin;
+result.dataset.origin=self.origin;
 result.dataset.tools=String(typeof document.modelContext);
 fetch('/health').then(()=>result.dataset.network='open').catch(()=>result.dataset.network='blocked');
 const render=()=>result.textContent='Count '+count;

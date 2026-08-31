@@ -156,3 +156,32 @@ test("repair replaces replica, outbox, and rejection receipts atomically", async
   assert.equal(loaded.receipts.find((record) => record.operationId === retainedId)?.receipt.syncState, "queued");
   store.close();
 });
+
+test("workspace deletion removes its local identity, replica, queue, and receipts atomically", async () => {
+  const store = await LocalWorkspaceStore.open(new IDBFactory());
+  const identity = await store.getOrCreateIdentity();
+  const operationId = crypto.randomUUID();
+  await store.commitLocal({
+    operation: {
+      protocolVersion: 1,
+      operationId,
+      workspaceId: identity.workspaceId,
+      intent: { kind: "patchSurface", surfaceId: "board", changes: [] },
+      updates: [{ surfaceId: "board", payload: new Uint8Array([1]) }],
+    },
+    receipt: {
+      operationId,
+      changedIds: ["element"],
+      surfaces: [{ surfaceId: "board" }],
+      syncState: "local",
+    },
+    surfaceStates: [{ surfaceId: "board", state: new Uint8Array([1]) }],
+  });
+
+  await store.deleteWorkspace(identity.workspaceId);
+  const replacement = await store.getOrCreateIdentity();
+  assert.notEqual(replacement.workspaceId, identity.workspaceId);
+  assert.equal((await store.loadWorkspace(replacement)).surfaces.length, 0);
+  assert.equal((await store.listOutbox(identity.workspaceId)).length, 0);
+  store.close();
+});

@@ -7,6 +7,7 @@ import {
 import type {
   AnonymousBootstrapRequest,
   CreateJoinCapabilityRequest,
+  DeleteWorkspaceResponse,
 } from "./session-protocol.js";
 import {
   roleAllows,
@@ -28,7 +29,7 @@ export class IdentityError extends Error {
   override readonly name = "IdentityError";
 
   constructor(
-    readonly code: "invalid" | "unauthorized" | "forbidden" | "workspace_conflict" | "expired",
+    readonly code: "invalid" | "unauthorized" | "forbidden" | "workspace_conflict" | "workspace_deleted" | "expired",
     message: string,
   ) {
     super(message);
@@ -83,9 +84,13 @@ export class SessionAuthority {
         error &&
         typeof error === "object" &&
         "code" in error &&
-        error.code === "workspace_conflict"
+        (error.code === "workspace_conflict" || error.code === "workspace_deleted")
       ) {
-        throw new IdentityError("workspace_conflict", "The workspace identifier is already claimed.");
+        const deleted = error.code === "workspace_deleted";
+        throw new IdentityError(
+          deleted ? "workspace_deleted" : "workspace_conflict",
+          deleted ? "This workspace was deleted." : "The workspace identifier is already claimed.",
+        );
       }
       throw error;
     }
@@ -184,5 +189,18 @@ export class SessionAuthority {
       sessionSecret,
       expiresAt: stored.expiresAt.toISOString(),
     });
+  }
+
+  async deleteWorkspace(
+    actor: AuthorizedSession,
+    backupRetentionDays: number,
+  ): Promise<DeleteWorkspaceResponse> {
+    if (actor.role !== "owner") {
+      throw new IdentityError("forbidden", "Only a workspace owner can delete the workspace.");
+    }
+    if (!Number.isInteger(backupRetentionDays) || backupRetentionDays < 1 || backupRetentionDays > 365) {
+      throw new IdentityError("invalid", "Backup retention must be between one and 365 days.");
+    }
+    return this.#store.deleteWorkspace(actor, backupRetentionDays);
   }
 }

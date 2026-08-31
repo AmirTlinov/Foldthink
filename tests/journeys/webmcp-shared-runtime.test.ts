@@ -11,7 +11,10 @@ declare global {
 }
 
 test("a committed WebMCP patch reaches the person and a linked device", async ({ browser, page }) => {
-  test.skip(!process.env.TEST_DATABASE_URL, "TEST_DATABASE_URL is not configured.");
+  test.skip(
+    !process.env.TEST_DATABASE_URL && !process.env.FOLDTHINK_EXTERNAL_BASE_URL,
+    "A shared Foldthink service is not configured.",
+  );
   await page.addInitScript(() => {
     const tools: Record<string, RegisteredTool> = {};
     window.foldthinkTestTools = tools;

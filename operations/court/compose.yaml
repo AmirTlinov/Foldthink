@@ -1,0 +1,61 @@
+services:
+  object-store:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: foldthink
+      MINIO_ROOT_PASSWORD: foldthink-court-secret
+    volumes:
+      - object_store:/data
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  bucket-init:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    entrypoint: ["/bin/sh", "-ceu"]
+    command:
+      - |
+        mc alias set court http://object-store:9000 foldthink foldthink-court-secret
+        mc mb --ignore-existing court/assets court/backups
+        mc version enable court/assets
+        mc version enable court/backups
+    networks: [data]
+    depends_on:
+      object-store:
+        condition: service_healthy
+
+  postgres:
+    environment:
+      PGBACKREST_REPO1_TYPE: posix
+      PGBACKREST_REPO1_PATH: /var/lib/pgbackrest/repository
+    volumes:
+      - pgbackrest_repository:/var/lib/pgbackrest/repository
+    depends_on:
+      bucket-init:
+        condition: service_completed_successfully
+
+  backup-prime:
+    environment:
+      PGBACKREST_REPO1_TYPE: posix
+      PGBACKREST_REPO1_PATH: /var/lib/pgbackrest/repository
+    volumes:
+      - pgbackrest_repository:/var/lib/pgbackrest/repository
+
+  backup-scheduler:
+    environment:
+      PGBACKREST_REPO1_TYPE: posix
+      PGBACKREST_REPO1_PATH: /var/lib/pgbackrest/repository
+    volumes:
+      - pgbackrest_repository:/var/lib/pgbackrest/repository
+
+  app:
+    environment:
+      COOKIE_SECURE: "false"
+
+volumes:
+  object_store: {}
+  pgbackrest_repository: {}

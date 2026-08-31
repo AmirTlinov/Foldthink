@@ -10,7 +10,8 @@ database/
 |-- migrations/
     |-- 202608310001_identity__create_anonymous_sessions.sql # Sessions, membership, and one-time linking.
 |   |-- 202608310002_synchronization__create_operation_journal.sql # Ordered CRDT state and receipts.
-|   `-- 202608310003_asset__create_asset_registry.sql # Verified immutable asset metadata.
+|   |-- 202608310003_asset__create_asset_registry.sql # Verified immutable asset metadata.
+|   `-- 202608310004_identity__create_workspace_deletion.sql # Tombstone, atomic purge, and asset cleanup queue.
 `-- tests/
     `-- migration-chain.test.mjs # Naming, order, and additive-chain proof.
 ```

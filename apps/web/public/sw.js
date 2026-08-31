@@ -1,6 +1,16 @@
 const revision = new URL(self.location.href).searchParams.get("revision") ?? "development";
 const shellCache = `foldthink-shell-${revision}`;
-const shellAssets = ["/", "/assets/app.js", "/assets/app.css", "/manifest.webmanifest", "/icon.svg"];
+const shellAssets = [
+  "/",
+  "/assets/app.js",
+  "/assets/app.css",
+  "/assets/public-browser.js",
+  "/assets/scene-element.js",
+  "/widget-frame.html",
+  "/assets/widget-frame.js",
+  "/manifest.webmanifest",
+  "/icon.svg",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(shellCache).then((cache) => cache.addAll(shellAssets)));
@@ -22,10 +32,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/", { ignoreVary: true })));
+    const fallback = url.pathname === "/widget-frame.html" ? "/widget-frame.html" : "/";
+    event.respondWith(fetch(request).catch(() => caches.match(fallback, { ignoreVary: true })));
     return;
   }
   event.respondWith(
-    caches.match(url.pathname, { ignoreVary: true }).then((cached) => cached ?? fetch(request)),
+    caches.match(url.pathname, { ignoreVary: true }).then(async (cached) => {
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok && ["font", "image", "script", "style"].includes(request.destination)) {
+        const cache = await caches.open(shellCache);
+        await cache.put(request, response.clone());
+      }
+      return response;
+    }),
   );
 });

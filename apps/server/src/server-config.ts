@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import { readReleaseIdentity } from "./release-identity.js";
 
 export type AssetStorageConfig =
   | Readonly<{
@@ -22,12 +23,16 @@ export type ServerConfig = Readonly<{
   publicOrigin: string;
   secureCookie: boolean;
   revision: string;
+  requiredSchemaMigration?: string;
+  production: boolean;
+  backupRetentionDays: number;
   assets: AssetStorageConfig;
   latex: Readonly<{
     tectonicBinary?: string;
     pdfInfoBinary?: string;
     pdfToCairoBinary?: string;
     bundlePath?: string;
+    cacheDirectory?: string;
   }>;
 }>;
 
@@ -63,9 +68,13 @@ export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
   const databaseUrl = environment.DATABASE_URL ?? "";
   const sessionHmacKey = environment.SESSION_HMAC_KEY ?? "";
   const publicOrigin = environment.PUBLIC_ORIGIN ?? "http://localhost:5173";
-  const revision = environment.REVISION ?? "development";
+  const release = readReleaseIdentity(environment);
+  const backupRetentionDays = Number(environment.BACKUP_RETENTION_DAYS ?? "30");
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new TypeError("PORT must be an available TCP port.");
+  }
+  if (!Number.isInteger(backupRetentionDays) || backupRetentionDays < 1 || backupRetentionDays > 365) {
+    throw new TypeError("BACKUP_RETENTION_DAYS must be between one and 365.");
   }
   if (!/^postgres(?:ql)?:\/\//u.test(databaseUrl)) {
     throw new TypeError("DATABASE_URL must be a PostgreSQL connection URL.");
@@ -81,19 +90,27 @@ export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
   if (bundlePath && !isAbsolute(bundlePath)) {
     throw new TypeError("LATEX_BUNDLE_PATH must be absolute when configured.");
   }
+  const cacheDirectory = environment.LATEX_CACHE_DIRECTORY?.trim();
+  if (cacheDirectory && !isAbsolute(cacheDirectory)) {
+    throw new TypeError("LATEX_CACHE_DIRECTORY must be absolute when configured.");
+  }
   return Object.freeze({
     port,
     databaseUrl,
     sessionHmacKey,
     publicOrigin,
     secureCookie: environment.COOKIE_SECURE !== "false",
-    revision,
+    revision: release.revision,
+    ...(release.requiredSchemaMigration ? { requiredSchemaMigration: release.requiredSchemaMigration } : {}),
+    production: release.production,
+    backupRetentionDays,
     assets: readAssetStorage(environment),
     latex: Object.freeze({
       ...(environment.TECTONIC_BINARY ? { tectonicBinary: environment.TECTONIC_BINARY } : {}),
       ...(environment.PDFINFO_BINARY ? { pdfInfoBinary: environment.PDFINFO_BINARY } : {}),
       ...(environment.PDFTOCAIRO_BINARY ? { pdfToCairoBinary: environment.PDFTOCAIRO_BINARY } : {}),
       ...(bundlePath ? { bundlePath } : {}),
+      ...(cacheDirectory ? { cacheDirectory } : {}),
     }),
   });
 }

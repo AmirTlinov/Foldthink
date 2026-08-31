@@ -27,7 +27,12 @@ export type ServerRuntime = Readonly<{
   assets: AssetRegistry;
   latex: LatexCompiler;
   socketTransport: WebSocketSyncTransport;
-  ready(): Promise<boolean>;
+  ready(): Promise<Readonly<{
+    ready: boolean;
+    databaseReachable: boolean;
+    schemaMigration: string | null;
+    requiredSchemaMigration: string | null;
+  }>>;
   close(): Promise<void>;
 }>;
 
@@ -42,6 +47,11 @@ export function composeServerRuntime(config: ServerConfig): ServerRuntime {
     ? new FilesystemObjectStore(config.assets.directory)
     : new S3ObjectStore(config.assets);
   const assets = new AssetRegistry(new PostgresAssetStore(pool), objectStore);
+  const assetCleanupTimer = setInterval(() => {
+    void assets.drainDeletionQueue().catch(() => undefined);
+  }, 60_000);
+  assetCleanupTimer.unref();
+  void assets.drainDeletionQueue().catch(() => undefined);
   const latex = new LatexCompiler(assets, new TectonicProcessCompiler(config.latex));
   const socketTransport = new WebSocketSyncTransport(gateway, async (request, workspaceId) => {
     assertOrigin(request, config.publicOrigin);
@@ -59,15 +69,40 @@ export function composeServerRuntime(config: ServerConfig): ServerRuntime {
     assets,
     latex,
     socketTransport,
-    async ready(): Promise<boolean> {
-      const result = await pool.query<Readonly<{ identity: string | null; sync: string | null; assets: string | null }>>(
-        `SELECT to_regclass('public.device_sessions')::text AS identity,
-                to_regclass('public.workspace_operations')::text AS sync,
-                to_regclass('public.assets')::text AS assets`,
-      );
-      return Boolean(result.rows[0]?.identity && result.rows[0]?.sync && result.rows[0]?.assets);
+    async ready() {
+      try {
+        const result = await pool.query<Readonly<{
+          identity: string | null;
+          sync: string | null;
+          assets: string | null;
+          schema_migration: string | null;
+        }>>(
+          `SELECT to_regclass('public.device_sessions')::text AS identity,
+                  to_regclass('public.workspace_operations')::text AS sync,
+                  to_regclass('public.assets')::text AS assets,
+                  (SELECT name FROM schema_migrations ORDER BY name DESC LIMIT 1) AS schema_migration`,
+        );
+        const row = result.rows[0];
+        const required = config.requiredSchemaMigration ?? null;
+        const schemaMigration = row?.schema_migration ?? null;
+        const expectedSchema = required === null || schemaMigration === required;
+        return Object.freeze({
+          ready: Boolean(row?.identity && row.sync && row.assets && expectedSchema),
+          databaseReachable: true,
+          schemaMigration,
+          requiredSchemaMigration: required,
+        });
+      } catch {
+        return Object.freeze({
+          ready: false,
+          databaseReachable: false,
+          schemaMigration: null,
+          requiredSchemaMigration: config.requiredSchemaMigration ?? null,
+        });
+      }
     },
     async close(): Promise<void> {
+      clearInterval(assetCleanupTimer);
       socketTransport.close();
       await pool.end();
     },

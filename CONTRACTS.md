@@ -108,8 +108,9 @@ also updates [ARCHITECTURE.md](ARCHITECTURE.md). Changing a public or persisted 
 shape adds an explicit migration or protocol version. Rewording that preserves the
 same observable behavior needs no compatibility layer.
 
-The executable product loop now includes local drawing, anonymous identity,
+The executable product loop includes local drawing, anonymous identity,
 synchronization, WebMCP, spatial items, rich document source, verified assets,
 bounded LaTeX, and sandboxed widgets without replacing the original mutation
-path. Operations is the remaining contract whose deployment and recovery proof
-must become executable before public-readiness claims are valid.
+path. The operations court builds the exact source revision, exercises those
+journeys through the public boundary, destroys PostgreSQL, and proves that the
+workspace operation and referenced asset recover into a clean system.

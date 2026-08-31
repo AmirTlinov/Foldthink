@@ -1,1 +1,1 @@
-export { consumeJoinCapability } from "./join-capability-client.js";
+export { consumeJoinCapability, deleteWorkspace } from "./join-capability-client.js";

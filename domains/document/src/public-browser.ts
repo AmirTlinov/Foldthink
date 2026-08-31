@@ -9,6 +9,7 @@ export type {
 } from "./document-renderer.js";
 export { DocumentError } from "./document-protocol.js";
 export type { LatexCompilation, LatexCompilationPage } from "./document-protocol.js";
+export { startWidgetFrame } from "./widget-frame-runtime.js";
 
 export function loadBlockEditor(): Promise<typeof import("./block-editor-entry.js")> {
   return import("./block-editor-entry.js");

@@ -4,6 +4,7 @@ import type {
   AssetStore,
   NewAssetReservation,
   NewDerivedAsset,
+  QueuedAssetDeletion,
   StoredAsset,
 } from "./asset-store.js";
 
@@ -147,5 +148,58 @@ export class PostgresAssetStore implements AssetStore {
     const existing = await this.findReadyDerived(input.workspaceId, input.derivationKey);
     if (!existing) throw new Error("A concurrent derived asset did not become readable.");
     return existing;
+  }
+
+  async claimDeletionBatch(
+    now: Date,
+    leaseUntil: Date,
+    limit: number,
+  ): Promise<readonly QueuedAssetDeletion[]> {
+    const result = await this.#pool.query<Readonly<{
+      object_key: string;
+      workspace_id: string;
+      attempt_count: number;
+    }>>(
+      `WITH claimed AS (
+         SELECT object_key
+           FROM asset_deletion_queue
+          WHERE completed_at IS NULL
+            AND (lease_until IS NULL OR lease_until <= $1)
+          ORDER BY queued_at, object_key
+          LIMIT $2
+          FOR UPDATE SKIP LOCKED
+       )
+       UPDATE asset_deletion_queue queue
+          SET lease_until = $3,
+              attempt_count = queue.attempt_count + 1,
+              last_error = NULL
+         FROM claimed
+        WHERE queue.object_key = claimed.object_key
+       RETURNING queue.object_key, queue.workspace_id, queue.attempt_count`,
+      [now, limit, leaseUntil],
+    );
+    return Object.freeze(result.rows.map((row) => Object.freeze({
+      objectKey: row.object_key,
+      workspaceId: row.workspace_id,
+      attemptCount: row.attempt_count,
+    })));
+  }
+
+  async completeDeletion(objectKey: string, completedAt: Date): Promise<void> {
+    await this.#pool.query(
+      `UPDATE asset_deletion_queue
+          SET completed_at = $2, lease_until = NULL, last_error = NULL
+        WHERE object_key = $1 AND completed_at IS NULL`,
+      [objectKey, completedAt],
+    );
+  }
+
+  async failDeletion(objectKey: string, message: string): Promise<void> {
+    await this.#pool.query(
+      `UPDATE asset_deletion_queue
+          SET lease_until = NULL, last_error = $2
+        WHERE object_key = $1 AND completed_at IS NULL`,
+      [objectKey, message.slice(0, 500)],
+    );
   }
 }

@@ -13,6 +13,7 @@ tests/
     |-- rich-document.test.ts                # Markdown, LaTeX, widget, asset, and linked-device journey.
     |-- spatial-notebook-workspace.test.ts # Item, cover, page, stack, and deletion journey.
     |-- webmcp-shared-runtime.test.ts        # Agent patch and visible-page journey.
+    |-- workspace-deletion.test.ts           # Active purge, local reset, tombstone, and object cleanup journey.
     `-- two-device-sync.test.ts              # Anonymous link, live delivery, and reload journey.
 ```
 

@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import type { SessionRole } from "./device-session.js";
+import type { DeleteWorkspaceResponse } from "./session-protocol.js";
 import type {
   BootstrapClaim,
   SessionStore,
@@ -42,6 +43,19 @@ export class PostgresSessionStore implements SessionStore {
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [claim.workspaceId],
+      );
+      const deleted = await client.query(
+        "SELECT 1 FROM deleted_workspaces WHERE workspace_id = $1",
+        [claim.workspaceId],
+      );
+      if (deleted.rowCount === 1) {
+        throw Object.assign(new Error("This workspace was deleted."), {
+          code: "workspace_deleted",
+        });
+      }
       const existing = await client.query<SessionRow>(
         `SELECT bc.session_id, bc.workspace_id, wm.role, ds.expires_at
            FROM bootstrap_claims bc
@@ -196,6 +210,46 @@ export class PostgresSessionStore implements SessionStore {
         workspaceId: row.workspace_id,
         role: row.role,
         expiresAt: input.sessionExpiresAt,
+      });
+    } catch (error) {
+      await rollback(client);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteWorkspace(
+    actor: Readonly<{ sessionId: string; workspaceId: string; role: SessionRole }>,
+    backupRetentionDays: number,
+  ): Promise<DeleteWorkspaceResponse> {
+    const client = await this.#pool.connect();
+    try {
+      await client.query("BEGIN");
+      const deletion = await client.query<Readonly<{ queued_assets: number }>>(
+        "SELECT delete_workspace_active_data($1, $2, $3) AS queued_assets",
+        [actor.workspaceId, actor.sessionId, backupRetentionDays],
+      );
+      const tombstone = await client.query<Readonly<{
+        deleted_at: Date;
+        backup_retention_until: Date;
+      }>>(
+        `SELECT deleted_at, backup_retention_until
+           FROM deleted_workspaces
+          WHERE workspace_id = $1`,
+        [actor.workspaceId],
+      );
+      const queuedAssets = deletion.rows[0]?.queued_assets;
+      const receipt = tombstone.rows[0];
+      if (typeof queuedAssets !== "number" || !Number.isInteger(queuedAssets) || !receipt) {
+        throw new Error("PostgreSQL did not return the workspace deletion receipt.");
+      }
+      await client.query("COMMIT");
+      return Object.freeze({
+        workspaceId: actor.workspaceId,
+        deletedAt: receipt.deleted_at.toISOString(),
+        backupRetentionUntil: receipt.backup_retention_until.toISOString(),
+        queuedAssets,
       });
     } catch (error) {
       await rollback(client);

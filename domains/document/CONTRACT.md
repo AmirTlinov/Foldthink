@@ -53,7 +53,8 @@ content.
 
 ## WidgetHost guarantees
 
-1. A widget runs in a sandboxed iframe with an opaque origin.
+1. A widget runs in a dedicated sandboxed iframe document with an opaque origin
+   and a widget-only Content Security Policy.
 2. The iframe receives a versioned input object and only explicit capabilities.
 3. Parent and widget exchange messages through a typed, origin-checked
    `postMessage` protocol.

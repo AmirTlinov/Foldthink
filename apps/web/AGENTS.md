@@ -11,6 +11,7 @@ apps/web/
 |-- tsconfig.json      # Browser and JSX compiler boundary.
 |-- vite.config.ts     # Static application build and local proxy.
 |-- index.html         # Immediate browser entry document.
+|-- widget-frame.html  # Sandboxed widget execution document.
 |-- public/
 |   |-- manifest.webmanifest # Installable application identity.
 |   |-- icon.svg             # Full-bleed scalable application icon.
@@ -19,6 +20,7 @@ apps/web/
 |   |-- main.tsx                  # React composition entry.
 |   |-- foldthink-page.tsx        # Continuous full-screen surface shell.
 |   |-- compose-web-runtime.ts    # Local-first canvas, document, sync, and WebMCP wiring.
+|   |-- widget-frame.ts           # Isolated widget runtime composition entry.
 |   `-- app-theme.css             # Surface material and minimal status readout.
 `-- tests/
     `-- web-startup.test.ts       # Direct-to-surface shell proof.

@@ -24,6 +24,7 @@ domains/document/
 |   |-- tectonic-process-compiler.ts # Cached-only Tectonic and SVG pages.
 |   |-- bounded-process.ts          # Time and output process boundary.
 |   |-- widget-host.ts              # Opaque-origin iframe capability host.
+|   |-- widget-frame-runtime.ts     # Sandboxed widget source and state executor.
 |   |-- widget-message.ts           # Versioned widget message validation.
 |   |-- document-style-import.ts    # CSS side-effect import declaration.
 |   `-- document.css                # Document projection and editing surface.

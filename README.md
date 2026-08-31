@@ -55,13 +55,47 @@ with `ASSET_S3_BUCKET`, `ASSET_S3_REGION`, `ASSET_S3_ACCESS_KEY_ID`, and
 `ASSET_S3_FORCE_PATH_STYLE=true` support compatible providers. Optional
 `TECTONIC_BINARY`, `PDFINFO_BINARY`, `PDFTOCAIRO_BINARY`, and
 `LATEX_BUNDLE_PATH` select exact production binaries and the cached bundle.
+`LATEX_CACHE_DIRECTORY` selects the already populated Tectonic cache used by a
+local server process.
 
-A production PWA build is created with:
+A local PWA build is created with:
 
 ```sh
 pnpm build
 pnpm --filter @foldthink/web preview
 ```
+
+## Prove and run a release
+
+The production gate builds one exact Git revision, starts the complete topology,
+runs the external browser journeys, writes real synchronized state and an asset,
+backs PostgreSQL up, destroys its data volume, and restores that same state into a
+clean database:
+
+```sh
+pnpm verify:production
+```
+
+The successful court writes `dist/operations/release-court.json`. It contains the
+revision, schema identity, backup label, measured restore time, recovered
+operation revision, and recovered asset checksum. CI runs the same court before it
+publishes the application and PostgreSQL images for that exact commit.
+
+To deploy an already proved revision, copy the public configuration shape and
+replace every placeholder with the exact revision, immutable image digests, public
+origin, and independent secrets:
+
+```sh
+cp operations/.env.example operations/.env
+docker compose --env-file operations/.env -f operations/compose.yaml config
+docker compose --env-file operations/.env -f operations/compose.yaml pull
+docker compose --env-file operations/.env -f operations/compose.yaml up -d --wait
+```
+
+Caddy is the only public service. PostgreSQL, migrations, backup jobs, and internal
+metrics remain on the private deployment network. Read the executable release,
+backup, and clean-restore contract in
+[operations/CONTRACT.md](operations/CONTRACT.md) before operating production.
 
 ## Philosophy
 
@@ -87,8 +121,10 @@ repository verification command:
 pnpm verify
 ```
 
-Set `TEST_DATABASE_URL` to a migrated disposable database to run the real
-PostgreSQL idempotency and restore court locally. CI always runs that court.
+Set `TEST_DATABASE_URL` to a disposable PostgreSQL database to run the real
+database-backed package and browser proofs. `pnpm verify:production` owns its own
+isolated database, object store, browser, backup, destruction, and restore court.
+CI runs both layers.
 
 ## License
 

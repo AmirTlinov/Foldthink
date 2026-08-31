@@ -663,12 +663,14 @@ Security follows the same owners:
 4. Every command passes the shared JSON Schema, domain invariants, size limits, and
    rate limits before it is stored.
 5. CSP restricts sources for code, frames, connections, and assets.
-6. Agent-generated JavaScript runs on a separate origin in a sandbox and uses a
-   narrow message protocol.
+6. Agent-generated JavaScript runs in a dedicated iframe document whose sandbox
+   gives it an opaque origin; a widget-only Content Security Policy and a narrow
+   message protocol define its capabilities.
 7. Attachments pass size, MIME, and checksum validation; the user receives a scoped
    URL rather than a storage key.
-8. Logs contain IDs, revisions, durations, and error classes, while user text and
-   secrets remain inside their respective stores.
+8. Logs contain a generated request ID, route template, revision, duration, and
+   error class. Workspace, operation, asset, content, and secret identifiers remain
+   inside their respective stores.
 9. A workspace is private by default. Sharing always creates an explicit capability
    with a role and expiration.
 
@@ -688,7 +690,10 @@ Security follows the same owners:
 The health endpoint proves that the process is alive. The readiness endpoint proves
 that it can verify migrations and issue a short PostgreSQL query. A separate
 synthetic scenario creates a temporary surface, writes an operation, reads it over
-WebSocket, and deletes the workspace.
+WebSocket, verifies a referenced asset, and deletes the workspace. The production
+court runs that scenario through Caddy, destroys the PostgreSQL volume, restores a
+clean volume from pgBackRest, and writes the measured result only after the same
+HTTP state, WebSocket history, CRDT stroke, and object checksum return.
 
 ## 17. Verification of architectural contracts
 

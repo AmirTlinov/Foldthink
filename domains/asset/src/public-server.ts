@@ -1,4 +1,4 @@
-export type { AssetActor } from "./asset-registry.js";
+export type { AssetActor, AssetCleanupResult } from "./asset-registry.js";
 export { AssetRegistry } from "./asset-registry.js";
 export type { AssetObjectStore, StoredObject } from "./asset-object-store.js";
 export { FilesystemObjectStore } from "./filesystem-object-store.js";

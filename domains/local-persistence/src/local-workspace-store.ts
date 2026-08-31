@@ -295,6 +295,38 @@ export class LocalWorkspaceStore implements WorkspaceCommitSink {
     for (const listener of this.#outboxListeners) listener();
   }
 
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    const transaction = this.#database.transaction(
+      [stores.meta, stores.surfaces, stores.outbox, stores.receipts],
+      "readwrite",
+    );
+    const completed = transactionDone(transaction);
+    const meta = transaction.objectStore(stores.meta);
+    const currentRequest = meta.get("current");
+    const scheduled = new Promise<void>((resolve, reject) => {
+      currentRequest.onerror = () => reject(currentRequest.error ?? new LocalStorageError("Local identity lookup failed."));
+      currentRequest.onsuccess = () => {
+        const current = currentRequest.result as LocalIdentity | undefined;
+        if (!current || current.workspaceId !== workspaceId) {
+          transaction.abort();
+          reject(new LocalStorageError("Only the current local workspace can be deleted."));
+          return;
+        }
+        meta.delete("current");
+        transaction.objectStore(stores.surfaces).clear();
+        transaction.objectStore(stores.outbox).clear();
+        transaction.objectStore(stores.receipts).clear();
+        resolve();
+      };
+    });
+    await scheduled.catch(async (error: unknown) => {
+      await completed.catch(() => undefined);
+      throw error;
+    });
+    await completed;
+    for (const listener of this.#outboxListeners) listener();
+  }
+
   observeOutbox(listener: () => void): () => void {
     this.#outboxListeners.add(listener);
     return () => this.#outboxListeners.delete(listener);

@@ -12,6 +12,7 @@ import type {
   AssetStore,
   NewAssetReservation,
   NewDerivedAsset,
+  QueuedAssetDeletion,
   StoredAsset,
 } from "../src/asset-store.js";
 import type { AssetState } from "../src/asset-record.js";
@@ -34,6 +35,8 @@ class MemoryObjects implements AssetObjectStore {
 
 class MemoryAssetStore implements AssetStore {
   readonly values = new Map<string, StoredAsset>();
+  readonly deletions: QueuedAssetDeletion[] = [];
+  readonly completed = new Set<string>();
 
   async reserve(input: NewAssetReservation): Promise<StoredAsset> {
     const value: StoredAsset = Object.freeze({
@@ -97,6 +100,16 @@ class MemoryAssetStore implements AssetStore {
     this.values.set(value.assetId, value);
     return value;
   }
+
+  async claimDeletionBatch(_now: Date, _leaseUntil: Date, limit: number): Promise<readonly QueuedAssetDeletion[]> {
+    return this.deletions.splice(0, limit);
+  }
+
+  async completeDeletion(objectKey: string): Promise<void> {
+    this.completed.add(objectKey);
+  }
+
+  async failDeletion(): Promise<void> {}
 }
 
 const actor: AssetActor = Object.freeze({
@@ -174,4 +187,20 @@ test("one derivation key reuses one verified artifact", async () => {
     metadata: { width: 612, height: 792 },
   });
   assert.deepEqual(repeated, first);
+});
+
+test("workspace deletion drains owned object keys through one retryable queue", async () => {
+  const store = new MemoryAssetStore();
+  const objects = new MemoryObjects();
+  const registry = new AssetRegistry(store, objects);
+  const key = `user/${actor.workspaceId}/${randomUUID()}`;
+  objects.values.set(key, Object.freeze({
+    bytes: new TextEncoder().encode("delete me"),
+    mimeType: "text/plain",
+  }));
+  store.deletions.push(Object.freeze({ objectKey: key, workspaceId: actor.workspaceId, attemptCount: 1 }));
+
+  assert.deepEqual(await registry.drainDeletionQueue(), { claimed: 1, deleted: 1, failed: 0 });
+  assert.equal(objects.values.has(key), false);
+  assert.equal(store.completed.has(key), true);
 });

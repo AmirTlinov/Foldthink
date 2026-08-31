@@ -7,7 +7,7 @@ import {
   type DocumentEditRequest,
   type DocumentRenderer,
 } from "@foldthink/document/browser";
-import { consumeJoinCapability } from "@foldthink/identity/browser";
+import { consumeJoinCapability, deleteWorkspace as deleteRemoteWorkspace } from "@foldthink/identity/browser";
 import {
   CanvasSceneRenderer,
   DrawingToolController,
@@ -39,6 +39,7 @@ export type WebRuntime = Readonly<{
   addPage(): Promise<void>;
   turnPage(direction: -1 | 1): Promise<void>;
   deleteSelected(): Promise<void>;
+  deleteWorkspace(): Promise<void>;
   closeItem(): void;
   destroy(): void;
 }>;
@@ -284,6 +285,12 @@ export async function composeWebRuntime(
       });
       spatial.close();
       spatial.select();
+    },
+    async deleteWorkspace(): Promise<void> {
+      await deleteRemoteWorkspace(identity.workspaceId);
+      sync.stop();
+      await store.deleteWorkspace(identity.workspaceId);
+      window.location.reload();
     },
     closeItem(): void {
       spatial.close();

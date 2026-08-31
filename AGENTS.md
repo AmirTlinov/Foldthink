@@ -67,9 +67,9 @@ The repository has no generic `core`, `shared`, `common`, `utils`, `helpers`,
 The local thought loop, anonymous identity, durable synchronization, WebMCP,
 spatial notebooks and documents, pressure-sensitive ink, geometric erasing,
 verified assets, rich source editing, bounded LaTeX, safe widgets, and both
-composition roots are executable. Production recovery remains the final
-contract-led slice. Run every active proof with:
+composition roots are executable. The production owner builds one exact revision,
+starts the private topology, runs the browser journeys, destroys PostgreSQL, and
+proves a clean restore. Run the source and product proofs with `pnpm verify`, then
+run the release and recovery court with `pnpm verify:production`.
 
-```sh
-pnpm verify
-```
+No public-readiness claim is stronger than those two executable results.

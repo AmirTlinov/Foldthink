@@ -21,6 +21,12 @@ const maximumAssetBytes = 20_000_000;
 
 export type AssetActor = AuthorizedSession;
 
+export type AssetCleanupResult = Readonly<{
+  claimed: number;
+  deleted: number;
+  failed: number;
+}>;
+
 function hashBytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -223,6 +229,32 @@ export class AssetRegistry {
 
   async assertReady(actor: AssetActor, assetIds: readonly string[]): Promise<void> {
     for (const assetId of new Set(assetIds)) await this.metadata(actor, assetId);
+  }
+
+  async drainDeletionQueue(limit = 32): Promise<AssetCleanupResult> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 256) {
+      throw new AssetError("invalid", "An asset cleanup batch must contain between one and 256 objects.");
+    }
+    const now = this.#now();
+    const claimed = await this.#store.claimDeletionBatch(
+      now,
+      new Date(now.getTime() + 5 * 60 * 1_000),
+      limit,
+    );
+    let deleted = 0;
+    let failed = 0;
+    for (const queued of claimed) {
+      try {
+        await this.#objects.delete(queued.objectKey);
+        await this.#store.completeDeletion(queued.objectKey, this.#now());
+        deleted += 1;
+      } catch (error) {
+        failed += 1;
+        const name = error instanceof Error ? error.name : "ObjectStoreError";
+        await this.#store.failDeletion(queued.objectKey, `Object deletion failed: ${name}`);
+      }
+    }
+    return Object.freeze({ claimed: claimed.length, deleted, failed });
   }
 
   async #required(actor: AssetActor, assetId: string): Promise<StoredAsset> {

@@ -1,0 +1,149 @@
+name: foldthink
+
+x-pgbackrest-environment: &pgbackrest-environment
+  PGBACKREST_REPO1_TYPE: s3
+  PGBACKREST_REPO1_PATH: /foldthink
+  PGBACKREST_REPO1_S3_BUCKET: ${PGBACKREST_S3_BUCKET:?PGBACKREST_S3_BUCKET is required}
+  PGBACKREST_REPO1_S3_ENDPOINT: ${PGBACKREST_S3_ENDPOINT:?PGBACKREST_S3_ENDPOINT is required}
+  PGBACKREST_REPO1_S3_REGION: ${PGBACKREST_S3_REGION:?PGBACKREST_S3_REGION is required}
+  PGBACKREST_REPO1_S3_KEY: ${PGBACKREST_S3_KEY:?PGBACKREST_S3_KEY is required}
+  PGBACKREST_REPO1_S3_KEY_SECRET: ${PGBACKREST_S3_KEY_SECRET:?PGBACKREST_S3_KEY_SECRET is required}
+  PGBACKREST_REPO1_S3_URI_STYLE: ${PGBACKREST_S3_URI_STYLE:-host}
+  PGBACKREST_REPO1_STORAGE_PORT: ${PGBACKREST_STORAGE_PORT:-443}
+  PGBACKREST_REPO1_STORAGE_VERIFY_TLS: ${PGBACKREST_STORAGE_VERIFY_TLS:-y}
+  PGBACKREST_REPO1_CIPHER_TYPE: aes-256-cbc
+  PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:?PGBACKREST_CIPHER_PASS is required}
+  PGBACKREST_REPO1_RETENTION_FULL: ${PGBACKREST_RETENTION_FULL:-4}
+
+services:
+  postgres:
+    image: ${FOLDTHINK_POSTGRES_IMAGE:?FOLDTHINK_POSTGRES_IMAGE is required}
+    restart: unless-stopped
+    environment:
+      <<: *pgbackrest-environment
+      POSTGRES_DB: foldthink
+      POSTGRES_USER: foldthink
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_spool:/var/spool/pgbackrest
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foldthink -d foldthink"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  migration:
+    image: ${FOLDTHINK_IMAGE:?FOLDTHINK_IMAGE is required}
+    restart: "no"
+    command: ["node", "/opt/foldthink/migrate.mjs"]
+    environment:
+      DATABASE_URL: postgresql://foldthink:${POSTGRES_PASSWORD}@postgres/foldthink
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backup-prime:
+    image: ${FOLDTHINK_POSTGRES_IMAGE}
+    restart: "no"
+    command: ["foldthink-backup-prime"]
+    environment:
+      <<: *pgbackrest-environment
+      PGHOST: /var/run/postgresql
+      PGUSER: foldthink
+      PGDATABASE: foldthink
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - operation_evidence:/var/lib/foldthink-operations
+    networks: [data]
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+  backup-scheduler:
+    image: ${FOLDTHINK_POSTGRES_IMAGE}
+    restart: unless-stopped
+    command: ["foldthink-backup-scheduler"]
+    environment:
+      <<: *pgbackrest-environment
+      PGHOST: /var/run/postgresql
+      PGUSER: foldthink
+      PGDATABASE: foldthink
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-21600}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - postgres_socket:/var/run/postgresql
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - operation_evidence:/var/lib/foldthink-operations
+    networks: [data]
+    depends_on:
+      backup-prime:
+        condition: service_completed_successfully
+
+  app:
+    image: ${FOLDTHINK_IMAGE}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REVISION: ${FOLDTHINK_REVISION:?FOLDTHINK_REVISION is required}
+      DATABASE_URL: postgresql://foldthink:${POSTGRES_PASSWORD}@postgres/foldthink
+      SESSION_HMAC_KEY: ${SESSION_HMAC_KEY:?SESSION_HMAC_KEY is required}
+      PUBLIC_ORIGIN: ${FOLDTHINK_PUBLIC_ORIGIN:?FOLDTHINK_PUBLIC_ORIGIN is required}
+      COOKIE_SECURE: "true"
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      ASSET_BACKEND: s3
+      ASSET_S3_BUCKET: ${ASSET_S3_BUCKET:?ASSET_S3_BUCKET is required}
+      ASSET_S3_REGION: ${ASSET_S3_REGION:?ASSET_S3_REGION is required}
+      ASSET_S3_ENDPOINT: ${ASSET_S3_ENDPOINT:-}
+      ASSET_S3_FORCE_PATH_STYLE: ${ASSET_S3_FORCE_PATH_STYLE:-false}
+      ASSET_S3_ACCESS_KEY_ID: ${ASSET_S3_ACCESS_KEY_ID:?ASSET_S3_ACCESS_KEY_ID is required}
+      ASSET_S3_SECRET_ACCESS_KEY: ${ASSET_S3_SECRET_ACCESS_KEY:?ASSET_S3_SECRET_ACCESS_KEY is required}
+    networks: [edge, data]
+    depends_on:
+      backup-prime:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  edge:
+    image: ${FOLDTHINK_IMAGE}
+    restart: unless-stopped
+    user: "0:0"
+    command: ["caddy", "run", "--config", "/opt/foldthink/Caddyfile", "--adapter", "caddyfile"]
+    environment:
+      FOLDTHINK_SITE_ADDRESS: ${FOLDTHINK_SITE_ADDRESS:?FOLDTHINK_SITE_ADDRESS is required}
+      XDG_DATA_HOME: /var/lib/caddy
+      XDG_CONFIG_HOME: /var/lib/caddy-config
+    ports:
+      - "${FOLDTHINK_HTTP_PORT:-80}:8080"
+      - "${FOLDTHINK_HTTPS_PORT:-443}:8443"
+    volumes:
+      - caddy_data:/var/lib/caddy
+      - caddy_config:/var/lib/caddy-config
+    networks: [edge]
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  edge: {}
+  data:
+    internal: true
+
+volumes:
+  postgres_data: {}
+  postgres_socket: {}
+  pgbackrest_spool: {}
+  operation_evidence: {}
+  caddy_data: {}
+  caddy_config: {}

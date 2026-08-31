@@ -93,6 +93,14 @@ class MemoryAssetStore implements AssetStore {
     this.values.set(value.assetId, value);
     return value;
   }
+
+  async claimDeletionBatch(): Promise<readonly []> {
+    return Object.freeze([]);
+  }
+
+  async completeDeletion(): Promise<void> {}
+
+  async failDeletion(): Promise<void> {}
 }
 
 const actor: AssetActor = Object.freeze({

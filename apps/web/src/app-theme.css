@@ -188,6 +188,65 @@ body {
   background: rgba(23, 23, 20, 0.055);
 }
 
+.creation-choices .workspace-delete-choice {
+  color: #8d2e27;
+}
+
+.workspace-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 23, 20, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.workspace-dialog {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(23, 23, 20, 0.08);
+  border-radius: 24px;
+  background: rgba(248, 248, 244, 0.97);
+  box-shadow: 0 24px 70px rgba(23, 23, 20, 0.18);
+}
+
+.workspace-dialog h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 580;
+}
+
+.workspace-dialog p {
+  margin: 12px 0 22px;
+  color: rgba(23, 23, 20, 0.62);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.workspace-dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.workspace-dialog button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 14px;
+  color: #171714;
+  background: rgba(23, 23, 20, 0.07);
+  font: inherit;
+}
+
+.workspace-dialog .confirm-workspace-deletion {
+  color: #fff;
+  background: #8d2e27;
+}
+
 .surface-status {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));

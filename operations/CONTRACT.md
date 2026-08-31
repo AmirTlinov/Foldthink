@@ -9,10 +9,10 @@
 | Owner | Responsibility |
 |---|---|
 | Caddy | TLS termination, static PWA, same-origin API, and WebSocket routing |
-| Release process | Exact source revision, build artifact, migration order, and rollout result |
+| Release builder | Exact source revision, immutable artifact, migration order, and manifest |
 | PostgreSQL | Primary durable state and transaction integrity |
 | pgBackRest | WAL archiving and full/incremental offsite backups |
-| Restore drill | Evidence that a clean system can recover real workspace state |
+| Release court | Browser journeys plus evidence that a clean system recovers real workspace state |
 
 The operations domain protects and verifies PostgreSQL; it does not become another
 semantic writer of workspace records.
@@ -26,14 +26,18 @@ Internet -> Caddy -> Foldthink app -> PostgreSQL
                     asset bucket    pgBackRest bucket
 ```
 
-1. Caddy exposes only HTTPS and routes `/api` and `/sync` to the application.
+1. Caddy terminates public HTTPS, redirects public HTTP, and routes `/api`,
+   `/sync`, `/health`, and `/ready` to the application.
 2. PostgreSQL listens on the private deployment network rather than the public
    interface.
 3. The deployed application reports its exact source commit and schema version.
 4. Configuration and secrets enter through the deployment environment and remain
    outside images, source control, logs, and client bundles.
-5. One release uses one immutable application artifact across migration check,
-   rollout, and verification.
+5. One release uses one immutable application artifact across migration, app,
+   edge, and verification. Its OCI label, embedded manifest, health response, and
+   requested revision must agree exactly.
+6. `/internal/metrics` stays on the private application boundary; Caddy returns
+   `404` for that public path.
 
 ## Migration contract
 
@@ -48,48 +52,61 @@ Internet -> Caddy -> Foldthink app -> PostgreSQL
 
 ## Backup and restore contract
 
-1. pgBackRest sends base/incremental backups and WAL to storage outside the VPS.
-2. Monitoring records the last successful backup and last archived WAL segment.
+1. pgBackRest sends full/incremental backups and WAL to an S3 repository outside
+   the VPS, encrypted with an independent repository secret.
+2. Every successful backup records its label, completion time, start and stop WAL,
+   and the greatest archived WAL segment in one atomic evidence file.
 3. A restore drill starts with a clean PostgreSQL instance and only documented
    backup inputs.
 4. The drill restores to a declared recovery target, starts the application, opens
    a known workspace, and verifies a known revision and asset reference.
 5. Measured recovery point and recovery time are recorded as evidence, not inferred
    from backup-file presence.
-6. Public release readiness requires a restore drill within the accepted freshness
-   window.
+6. Public release readiness requires a successful exact-revision release court;
+   the running backup monitor separately rejects a newest backup older than its
+   configured freshness window.
 7. The asset recovery policy protects ready object bytes independently of the
    database backup, and the drill verifies the checksum of a referenced asset.
 
 ## Health and observability contract
 
-| Signal | Meaning |
+| Signal | Owner and meaning |
 |---|---|
-| Health | The process event loop is alive |
-| Readiness | Schema is compatible and a bounded PostgreSQL query succeeds |
-| Commit acknowledgement p50/p95/p99 | Durable write latency |
-| Oldest outbox age | Age of user work awaiting a server copy |
-| Active and reconnecting WebSockets | Realtime channel stability |
-| Snapshot/update size | Compaction pressure |
-| Last WAL archive and backup | Offsite-copy freshness |
-| Last clean restore drill | Demonstrated recoverability |
+| Public health | Application process event loop is alive and names its exact revision |
+| Public readiness | Schema identity matches the artifact and a bounded PostgreSQL query succeeds |
+| Internal request p50/p95/p99 | `ServiceObserver` reports bounded in-memory latency samples |
+| Internal commit acknowledgement p50/p95/p99 | Durable operation route latency |
+| Internal WebSockets | Transport reports active, accepted, and rejected connections |
+| Backup evidence | pgBackRest label, completion time, and WAL range |
+| Release-court evidence | Exact revision, clean restore time, operation revision, and asset checksum |
 
-Logs contain request, workspace, operation, surface, revision, duration, and error
-class identifiers where relevant. They exclude user content and raw secrets.
+Request logs contain a bounded request ID, method, route template, status,
+duration, revision, and error class where relevant. Route templates deliberately
+exclude workspace, operation, asset, user-content, and secret values.
 
 ## Failure
 
-A failed migration stops rollout before the new process becomes ready. A failed
-backup or stale WAL archive blocks release according to the freshness policy. A
-failed restore drill opens an operational incident and invalidates recoverability
-claims until a clean drill passes.
+A failed migration stops the dependent services before readiness. A failed backup
+or stale backup fails the backup gate. A failed clean restore invalidates
+recoverability claims until the release court passes again.
 
 ## Executable proof
 
-- A clean Compose environment reaches readiness from repository instructions.
-- The deployed revision matches the intended exact commit.
-- PostgreSQL is unreachable from the public network.
-- Migration tests pass from clean and previous supported schemas.
-- A synthetic workspace operation travels through API, PostgreSQL, WebSocket, and
-  reload.
-- A clean restore reaches the declared revision and opens its referenced content.
+Run the complete proof from a clean checkout with:
+
+```sh
+pnpm verify:production
+```
+
+The court builds the exact commit, starts the Compose topology, checks the public
+boundary, runs every external browser journey, and writes one real workspace
+operation and verified asset. It then takes an incremental backup, stops the
+application, deletes the PostgreSQL data volume, restores a new volume, and proves
+the same CRDT revision through HTTP and WebSocket plus the same object checksum.
+Only after those checks does it write `dist/operations/release-court.json` and
+delete the temporary workspace.
+
+The court uses an isolated POSIX pgBackRest repository so the proof is deterministic
+and disposable. The production topology in `compose.yaml` keeps pgBackRest on the
+configured offsite S3 repository; the court overlay does not redefine that public
+deployment decision.

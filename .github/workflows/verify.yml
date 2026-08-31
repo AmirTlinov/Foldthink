@@ -64,3 +64,54 @@ jobs:
             /tmp/foldthink-latex-warm/main.tex
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm verify
+
+  production-court:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.24.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Prove the exact release and clean recovery
+        run: pnpm verify:production
+      - name: Preserve release-court evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: foldthink-release-court-${{ github.sha }}
+          path: |
+            dist/operations/backup-evidence.json
+            dist/operations/release-court.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Sign in to the project container registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish only the court-proven images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          app="ghcr.io/${owner}/foldthink"
+          postgres="ghcr.io/${owner}/foldthink-postgres"
+          docker tag foldthink-release:court "${app}:${GITHUB_SHA}"
+          docker tag foldthink-release:court "${app}:main"
+          docker tag foldthink-postgres:court "${postgres}:${GITHUB_SHA}"
+          docker tag foldthink-postgres:court "${postgres}:main"
+          docker push "${app}:${GITHUB_SHA}"
+          docker push "${app}:main"
+          docker push "${postgres}:${GITHUB_SHA}"
+          docker push "${postgres}:main"

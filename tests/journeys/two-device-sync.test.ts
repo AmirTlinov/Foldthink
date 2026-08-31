@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 test("a linked device receives one durable stroke and keeps it after reload", async ({ browser, page }) => {
-  test.skip(!process.env.TEST_DATABASE_URL, "TEST_DATABASE_URL is not configured.");
+  test.skip(
+    !process.env.TEST_DATABASE_URL && !process.env.FOLDTHINK_EXTERNAL_BASE_URL,
+    "A shared Foldthink service is not configured.",
+  );
 
   await page.goto("/");
   await expect(page.getByText("Shared")).toBeVisible({ timeout: 15_000 });

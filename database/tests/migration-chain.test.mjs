@@ -12,6 +12,7 @@ test("migrations form one named total order with one statement owner", async () 
     "202608310001_identity__create_anonymous_sessions.sql",
     "202608310002_synchronization__create_operation_journal.sql",
     "202608310003_asset__create_asset_registry.sql",
+    "202608310004_identity__create_workspace_deletion.sql",
   ]);
   for (const name of names) {
     assert.match(name, /^\d{12}_[a-z-]+__[a-z0-9_]+\.sql$/u);

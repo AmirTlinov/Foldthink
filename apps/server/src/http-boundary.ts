@@ -47,6 +47,14 @@ export function setSessionCookie(
   );
 }
 
+export function clearSessionCookie(response: ServerResponse, secure: boolean): void {
+  const name = secure ? secureSessionCookie : sessionCookie;
+  response.setHeader(
+    "set-cookie",
+    `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`,
+  );
+}
+
 export async function readJson(request: IncomingMessage, maximumBytes = 2_800_000): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
