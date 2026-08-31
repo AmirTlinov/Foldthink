@@ -1,0 +1,288 @@
+.foldthink-document-layer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.foldthink-document-layer[data-visible="true"] {
+  visibility: visible;
+}
+
+.foldthink-document-page {
+  position: absolute;
+  inset: 0 auto auto 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  container-type: size;
+}
+
+.foldthink-document-block {
+  position: absolute;
+  margin: 0;
+  color: #171714;
+  overflow: hidden;
+}
+
+.foldthink-markdown-block {
+  overflow: visible;
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", sans-serif;
+  line-height: 1.45;
+  letter-spacing: -0.012em;
+}
+
+.foldthink-markdown-block > :first-child {
+  margin-top: 0;
+}
+
+.foldthink-markdown-block > :last-child {
+  margin-bottom: 0;
+}
+
+.foldthink-markdown-block h1,
+.foldthink-markdown-block h2,
+.foldthink-markdown-block h3 {
+  margin: 0 0 0.58em;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.foldthink-markdown-block h1 {
+  font-size: 1.82em;
+}
+
+.foldthink-markdown-block h2 {
+  font-size: 1.38em;
+}
+
+.foldthink-markdown-block p,
+.foldthink-markdown-block ul,
+.foldthink-markdown-block ol,
+.foldthink-markdown-block pre,
+.foldthink-markdown-block blockquote {
+  margin: 0 0 0.72em;
+}
+
+.foldthink-markdown-block code,
+.foldthink-markdown-block pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.foldthink-markdown-block code {
+  padding: 0.08em 0.28em;
+  border-radius: 0.28em;
+  background: rgba(23, 23, 20, 0.055);
+}
+
+.foldthink-markdown-block pre {
+  padding: 0.72em 0.84em;
+  border-radius: 0.55em;
+  white-space: pre-wrap;
+  background: rgba(23, 23, 20, 0.045);
+}
+
+.foldthink-markdown-block a {
+  color: inherit;
+  text-decoration-color: rgba(23, 23, 20, 0.35);
+  text-underline-offset: 0.13em;
+  pointer-events: auto;
+}
+
+.foldthink-latex-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+
+.foldthink-latex-block::-webkit-scrollbar {
+  display: none;
+}
+
+.foldthink-latex-block > .katex-display {
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.foldthink-latex-block > img {
+  width: 100%;
+  height: 100%;
+  flex: 0 0 100%;
+  object-fit: contain;
+  object-position: top center;
+  scroll-snap-align: start;
+  background: white;
+}
+
+.foldthink-asset-block > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.foldthink-widget-block {
+  overflow: hidden;
+  border-radius: 18px;
+  pointer-events: auto;
+}
+
+.foldthink-widget-frame {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: transparent;
+}
+
+.foldthink-widget-frame[data-error="true"] {
+  opacity: 0.58;
+}
+
+.foldthink-document-error {
+  padding: 12px 14px;
+  color: #8d2e27;
+  border-radius: 12px;
+  background: rgba(141, 46, 39, 0.065);
+  font: 14px/1.4 ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.foldthink-editor-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: rgba(231, 231, 227, 0.54);
+  backdrop-filter: blur(22px) saturate(0.92);
+  -webkit-backdrop-filter: blur(22px) saturate(0.92);
+}
+
+.foldthink-editor-sheet {
+  width: min(900px, 100%);
+  height: min(760px, 100%);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(23, 23, 20, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 254, 249, 0.985);
+  box-shadow: 0 32px 90px rgba(23, 23, 20, 0.16);
+}
+
+.foldthink-editor-header,
+.foldthink-editor-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(23, 23, 20, 0.065);
+}
+
+.foldthink-editor-secondary:empty {
+  display: none;
+}
+
+.foldthink-editor-tabs,
+.foldthink-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.foldthink-editor-tabs button,
+.foldthink-editor-actions button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 13px;
+  color: rgba(23, 23, 20, 0.67);
+  background: transparent;
+  font: 13px ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.foldthink-editor-tabs button[data-selected="true"] {
+  color: #171714;
+  background: rgba(23, 23, 20, 0.07);
+}
+
+.foldthink-editor-tabs button:disabled {
+  display: none;
+}
+
+.foldthink-editor-tabs.compact button {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.foldthink-editor-actions .foldthink-editor-save {
+  color: #fffef9;
+  background: #171714;
+}
+
+.foldthink-editor-body,
+.foldthink-code-editor {
+  min-height: 0;
+  height: 100%;
+}
+
+.foldthink-code-editor[hidden] {
+  display: none;
+}
+
+.foldthink-editor-error {
+  min-height: 22px;
+  padding: 0 24px 14px;
+  color: #8d2e27;
+  font-size: 12px;
+}
+
+.foldthink-asset-form {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr);
+  gap: 10px;
+}
+
+.foldthink-asset-form input {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid rgba(23, 23, 20, 0.1);
+  border-radius: 12px;
+  color: #171714;
+  background: white;
+  font: 13px ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@media (max-width: 700px) {
+  .foldthink-editor-backdrop {
+    padding: 0;
+  }
+
+  .foldthink-editor-sheet {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .foldthink-editor-header {
+    overflow-x: auto;
+  }
+
+  .foldthink-editor-tabs button,
+  .foldthink-editor-actions button {
+    padding-inline: 10px;
+  }
+
+  .foldthink-asset-form {
+    grid-template-columns: 1fr;
+  }
+}

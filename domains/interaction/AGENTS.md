@@ -24,8 +24,8 @@ domains/interaction/
 |   |-- surface-coordinate-map.ts # Screen, board, cover, and page coordinate conversion.
 |   |-- page-grid.ts               # Canonical five-millimeter page rhythm.
 |   |-- workspace-item-arrangement.ts # Drop geometry to ordered stack intent.
-|   |-- canvas-scene-renderer.ts   # Scene and active-ink pixels.
-|   `-- pointer-intent-adapter.ts  # Pointer Events to domain intent.
+|   |-- canvas-scene-renderer.ts   # Scene pixels and stable document viewport.
+|   `-- pointer-intent-adapter.ts  # Pointer Events to drawing, space, and edit intent.
 `-- tests/
     |-- drawing-tool-controller.test.ts # Immutable drawing-policy proof.
     |-- erase-session.test.ts      # Partial geometric erasure proof.

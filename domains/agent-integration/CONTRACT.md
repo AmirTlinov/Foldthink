@@ -39,6 +39,10 @@ responses.
 | `inspect_surface` | read | Read the current visible surface projection | Surface ID, visible element IDs, and revisions |
 | `patch_surface` | edit | Dispatch one typed element patch | Operation ID, changed IDs, sync state, and revisions when committed |
 
+`patch_surface` accepts ordinary ink, shape, Markdown, LaTeX, and isolated widget
+elements. Workspace items, asset publication, and geometric erasure keep their
+dedicated owners and cannot be forged through this generic path.
+
 ## Inspection guarantees
 
 1. Inspection identifies the exact workspace, item, surface, and known revisions.
@@ -48,7 +52,9 @@ responses.
    preview.
 4. Ink is summarized by bounded geometry, pressure range, and visible style;
    erasure is summarized by bounded geometry and a bounded affected-stroke list.
-5. A follow-up inspection can determine whether returned revisions or changed IDs
+5. Markdown, LaTeX, and widget sources are bounded; an asset exposes its scoped
+   semantic ID and metadata reference rather than bytes or storage credentials.
+6. A follow-up inspection can determine whether returned revisions or changed IDs
    actually changed.
 
 ## Mutation guarantees

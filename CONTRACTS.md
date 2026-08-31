@@ -1,6 +1,6 @@
 # Foldthink Implementation Contracts
 
-> Status: target contracts for the first public implementation.
+> Status: executable contracts for the first public implementation.
 >
 > These documents define observable boundaries. Code, schemas, migrations, and
 > tests become their executable proof as each vertical slice is implemented.
@@ -108,8 +108,8 @@ also updates [ARCHITECTURE.md](ARCHITECTURE.md). Changing a public or persisted 
 shape adds an explicit migration or protocol version. Rewording that preserves the
 same observable behavior needs no compatibility layer.
 
-The first implementation slice activates only the workspace, surface, interaction,
-local-persistence, and web composition owners needed for a complete offline stroke.
-The next slice adds identity and synchronization without replacing that mutation
-path. Agent integration then binds WebMCP to the already executable runtime;
-documents, assets, and recovery expand the same product loop in later slices.
+The executable product loop now includes local drawing, anonymous identity,
+synchronization, WebMCP, spatial items, rich document source, verified assets,
+bounded LaTeX, and sandboxed widgets without replacing the original mutation
+path. Operations is the remaining contract whose deployment and recovery proof
+must become executable before public-readiness claims are valid.

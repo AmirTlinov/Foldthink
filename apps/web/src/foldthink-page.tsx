@@ -4,6 +4,7 @@ import { composeWebRuntime, type WebRuntime } from "./compose-web-runtime.js";
 
 export function FoldthinkPage(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const documentLayerRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<WebRuntime | undefined>(undefined);
   const [status, setStatus] = useState("Opening local surface");
   const [spatial, setSpatial] = useState<SpatialViewState>({ mode: "board" });
@@ -13,12 +14,13 @@ export function FoldthinkPage(): React.JSX.Element {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const documentLayer = documentLayerRef.current;
+    if (!canvas || !documentLayer) return;
     let destroyed = false;
     let destroy: (() => void) | undefined;
     let stopSpatial: (() => void) | undefined;
     let stopDrawingTool: (() => void) | undefined;
-    void composeWebRuntime(canvas, setStatus)
+    void composeWebRuntime(canvas, documentLayer, setStatus)
       .then((runtime) => {
         if (destroyed) {
           runtime.destroy();
@@ -64,6 +66,7 @@ export function FoldthinkPage(): React.JSX.Element {
           setToolPanel(false);
         }}
       />
+      <div ref={documentLayerRef} className="foldthink-document-layer" />
 
       <nav className="surface-actions" aria-label="Workspace actions">
         {insideItem ? (

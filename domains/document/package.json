@@ -1,0 +1,40 @@
+{
+  "name": "@foldthink/document",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/public-protocol.ts",
+    "./browser": "./src/public-browser.ts",
+    "./server": "./src/public-server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.11.0",
+    "@codemirror/lang-css": "6.3.1",
+    "@codemirror/lang-html": "6.4.12",
+    "@codemirror/lang-javascript": "6.2.5",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/legacy-modes": "6.5.3",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.9",
+    "@foldthink/asset": "workspace:*",
+    "@foldthink/surface": "workspace:*",
+    "@foldthink/workspace": "workspace:*",
+    "katex": "0.18.4",
+    "rehype-katex": "7.0.1",
+    "rehype-sanitize": "6.0.0",
+    "rehype-stringify": "10.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
+    "unified": "11.0.5"
+  },
+  "devDependencies": {
+    "@types/katex": "0.16.8"
+  }
+}

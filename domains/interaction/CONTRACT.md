@@ -64,6 +64,8 @@ cancelled. Routing contains no durable workspace state.
 7. A held selected item gains one lifted move preview; dropping over another item
    emits one ordered stack change, while dropping in free space removes prior
    stack membership.
+8. In an open document, a stationary finger or mouse double-tap resolves one page
+   coordinate for the document editor; Pencil remains owned by drawing.
 
 ## CanvasSceneRenderer guarantees
 
@@ -81,6 +83,9 @@ cancelled. Routing contains no durable workspace state.
 7. Page material and semantic page content use one canonical transform, so resize
    cannot detach ink from its five-millimeter grid.
 8. The renderer reads snapshots and emits pixels; it never edits domain state.
+9. A stable open document publishes its exact page transform and leaves rich
+   document blocks to the DOM renderer, while ink and page material remain canvas
+   owned.
 
 ## Failure
 

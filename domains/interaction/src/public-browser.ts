@@ -1,4 +1,5 @@
 export { CanvasSceneRenderer } from "./canvas-scene-renderer.js";
+export type { SurfaceTarget, SurfaceViewport } from "./canvas-scene-renderer.js";
 export { GestureArena } from "./gesture-arena.js";
 export type { GestureUpdate } from "./gesture-arena.js";
 export { DrawingToolController } from "./drawing-tool-controller.js";

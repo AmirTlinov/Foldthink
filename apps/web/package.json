@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@foldthink/agent-integration": "workspace:*",
+    "@foldthink/asset": "workspace:*",
+    "@foldthink/document": "workspace:*",
     "@foldthink/identity": "workspace:*",
     "@foldthink/interaction": "workspace:*",
     "@foldthink/local-persistence": "workspace:*",

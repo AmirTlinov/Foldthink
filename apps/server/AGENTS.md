@@ -15,7 +15,9 @@ apps/server/
 |   |-- compose-server-runtime.ts # PostgreSQL and domain owner wiring.
 |   |-- http-boundary.ts         # JSON, cookie, origin, and response mechanics.
 |   |-- identity-http-routes.ts  # Anonymous bootstrap and device-link adapter.
-|   `-- sync-http-routes.ts      # State and durable-operation HTTP adapter.
+|   |-- sync-http-routes.ts      # State and durable-operation HTTP adapter.
+|   |-- asset-http-routes.ts     # Authorized byte lifecycle adapter.
+|   `-- document-http-routes.ts  # Restricted LaTeX compilation adapter.
 `-- tests/
     `-- server-startup.test.ts   # Required durable configuration proof.
 ```

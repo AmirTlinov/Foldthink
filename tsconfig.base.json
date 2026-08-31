@@ -22,7 +22,13 @@
       "@foldthink/identity/server": ["./domains/identity/src/public-server.ts"],
       "@foldthink/synchronization/protocol": ["./domains/synchronization/src/public-protocol.ts"],
       "@foldthink/synchronization/browser": ["./domains/synchronization/src/public-browser.ts"],
-      "@foldthink/synchronization/server": ["./domains/synchronization/src/public-server.ts"]
+      "@foldthink/synchronization/server": ["./domains/synchronization/src/public-server.ts"],
+      "@foldthink/asset/protocol": ["./domains/asset/src/public-protocol.ts"],
+      "@foldthink/asset/browser": ["./domains/asset/src/public-browser.ts"],
+      "@foldthink/asset/server": ["./domains/asset/src/public-server.ts"],
+      "@foldthink/document/protocol": ["./domains/document/src/public-protocol.ts"],
+      "@foldthink/document/browser": ["./domains/document/src/public-browser.ts"],
+      "@foldthink/document/server": ["./domains/document/src/public-server.ts"]
     }
   }
 }

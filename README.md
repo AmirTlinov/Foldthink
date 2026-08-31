@@ -14,7 +14,10 @@ tap undoes the latest local mark; holding both fingers repeats undo. Every
 completed action is committed atomically to IndexedDB. When a Foldthink server is
 available, the same outbox is acknowledged by PostgreSQL and delivered to linked
 browsers. Page-local WebMCP tools inspect and patch that exact runtime rather than
-a second agent-only model.
+a second agent-only model. Document pages add editable Markdown, KaTeX math,
+bounded full-document LaTeX, verified images, and isolated interactive blocks.
+The source remains ordinary scene content; every rich representation can be
+rebuilt without becoming a second owner of the document.
 
 ## Run locally
 
@@ -37,12 +40,23 @@ export DATABASE_URL=postgresql://localhost/foldthink
 export SESSION_HMAC_KEY='replace-with-at-least-32-random-bytes'
 export PUBLIC_ORIGIN=http://localhost:5173
 export COOKIE_SECURE=false
+export ASSET_DIRECTORY="$PWD/.local/assets"
 pnpm migrate
 pnpm dev:shared
 ```
 
 `COOKIE_SECURE=false` exists only for local HTTP. A public deployment uses HTTPS
-and the secure `__Host-` session cookie. A production PWA build is created with:
+and the secure `__Host-` session cookie. Full-document LaTeX additionally needs
+`tectonic`, `pdfinfo`, and `pdftocairo`; Tectonic runs with an already cached
+bundle and network retrieval disabled. Production can replace the local asset
+directory with an S3-compatible store by setting `ASSET_BACKEND=s3` together
+with `ASSET_S3_BUCKET`, `ASSET_S3_REGION`, `ASSET_S3_ACCESS_KEY_ID`, and
+`ASSET_S3_SECRET_ACCESS_KEY`. `ASSET_S3_ENDPOINT` and
+`ASSET_S3_FORCE_PATH_STYLE=true` support compatible providers. Optional
+`TECTONIC_BINARY`, `PDFINFO_BINARY`, `PDFTOCAIRO_BINARY`, and
+`LATEX_BUNDLE_PATH` select exact production binaries and the cached bundle.
+
+A production PWA build is created with:
 
 ```sh
 pnpm build

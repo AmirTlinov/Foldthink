@@ -226,3 +226,62 @@ test("the generic patch tool cannot bypass atomic workspace-item creation", asyn
   }), /dedicated semantic commands/u);
   assert.equal(workspace.inspect("board").elements.length, 0);
 });
+
+test("an agent can create editable LaTeX and an isolated interactive block", async () => {
+  const workspace = runtime();
+  const tools = new Map<string, SiteToolDefinition>();
+  const adapter = new WebMCPAdapter(
+    () => ({
+      runtime: workspace,
+      visibleSurfaceId: "board",
+      authorizeEdit: async () => true,
+      committedRevision: () => undefined,
+      waitForCommittedReceipt: async () => undefined,
+    }),
+    {
+      modelContext: { registerTool: (tool) => tools.set(tool.name, tool) },
+    } as WebMcpDocument,
+  );
+  await adapter.register();
+  const patch = tools.get("patch_surface");
+  const inspect = tools.get("inspect_surface");
+  if (!patch || !inspect) throw new Error("Foldthink agent tools were not registered.");
+  await patch.execute({
+    changes: [
+      {
+        action: "put",
+        element: {
+          id: "agent-equation",
+          kind: "latex",
+          version: 1,
+          x: 80,
+          y: 100,
+          width: 640,
+          height: 180,
+          source: "x^2 + y^2 = z^2",
+          mode: "math",
+          color: "#171714",
+          fontSize: 34,
+        },
+      },
+      {
+        action: "put",
+        element: {
+          id: "agent-control",
+          kind: "widget",
+          version: 1,
+          x: 80,
+          y: 340,
+          width: 640,
+          height: 320,
+          html: "<button>Continue</button>",
+          css: "button { font: inherit }",
+          javascript: "document.querySelector('button').onclick=()=>foldthink.setState({done:true})",
+          state: { done: false },
+        },
+      },
+    ],
+  });
+  const result = await inspect.execute({}) as { elements: Array<Record<string, unknown>> };
+  assert.deepEqual(result.elements.map((element) => element.kind).sort(), ["latex", "widget"]);
+});

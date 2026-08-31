@@ -65,9 +65,10 @@ The repository has no generic `core`, `shared`, `common`, `utils`, `helpers`,
 `models`, or `services` holding areas.
 
 The local thought loop, anonymous identity, durable synchronization, WebMCP,
-spatial notebooks, pressure-sensitive ink, geometric erasing, and both composition
-roots are executable. Rich documents, assets, and production recovery remain
-contract-led future slices. Run every active proof with:
+spatial notebooks and documents, pressure-sensitive ink, geometric erasing,
+verified assets, rich source editing, bounded LaTeX, safe widgets, and both
+composition roots are executable. Production recovery remains the final
+contract-led slice. Run every active proof with:
 
 ```sh
 pnpm verify

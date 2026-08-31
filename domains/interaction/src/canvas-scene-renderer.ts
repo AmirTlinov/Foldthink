@@ -101,6 +101,15 @@ export type SurfaceTarget = Readonly<{
   point: ScreenPoint;
 }>;
 
+export type SurfaceViewport = Readonly<{
+  surfaceId: string;
+  x: number;
+  y: number;
+  scale: number;
+  width: number;
+  height: number;
+}>;
+
 export class CanvasSceneRenderer {
   readonly #canvas: HTMLCanvasElement;
   readonly #context: CanvasRenderingContext2D;
@@ -213,6 +222,22 @@ export class CanvasSceneRenderer {
     if (state.mode === "board") return this.#boardSurfaceId;
     const item = this.item(state.itemId);
     return item?.pageSurfaceIds[item.activePageIndex] ?? this.#boardSurfaceId;
+  }
+
+  documentViewport(): SurfaceViewport | undefined {
+    const state = this.#spatial.state();
+    if (state.mode !== "item") return undefined;
+    const item = this.item(state.itemId);
+    if (!item || item.itemKind !== "document") return undefined;
+    const transform = pageTransform(this.#cssWidth(), this.#cssHeight());
+    return Object.freeze({
+      surfaceId: this.activeSurfaceId(),
+      x: transform.x,
+      y: transform.y,
+      scale: transform.scale,
+      width: pageSize.width,
+      height: pageSize.height,
+    });
   }
 
   resolveSurfaceTarget(point: ScreenPoint): SurfaceTarget {
@@ -469,7 +494,7 @@ export class CanvasSceneRenderer {
     context.scale(transform.scale, transform.scale);
     this.#drawPageMaterial(0, 0, pageSize.width, pageSize.height, 0);
     const surface = this.#snapshots.get(item.pageSurfaceIds[item.activePageIndex] ?? "");
-    if (surface) this.#drawSurfaceElements(surface);
+    if (surface) this.#drawSurfaceElements(surface, item.itemKind === "document");
     if (this.#activeInk && this.#activeInkSurfaceId === surface?.surfaceId) this.#drawInk(this.#activeInk.displayStroke());
     if (surface) this.#drawActiveEraser(surface.surfaceId);
     context.restore();
@@ -574,12 +599,16 @@ export class CanvasSceneRenderer {
     context.restore();
   }
 
-  #drawSurfaceElements(snapshot: SurfaceSnapshot): void {
+  #drawSurfaceElements(snapshot: SurfaceSnapshot, omitDocumentBlocks = false): void {
     const strokes = snapshot.elements.filter((element): element is InkStroke => element.kind === "ink");
     const masks = snapshot.elements.filter((element): element is EraseMask => element.kind === "erase");
     if (this.#activeErase && this.#activeEraseSurfaceId === snapshot.surfaceId) masks.push(this.#activeErase);
     this.#drawInkComposition(strokes, masks);
     for (const element of snapshot.elements) {
+      if (
+        omitDocumentBlocks &&
+        (element.kind === "markdown" || element.kind === "latex" || element.kind === "widget" || element.kind === "asset")
+      ) continue;
       if (element.kind !== "item" && element.kind !== "ink" && element.kind !== "erase") {
         this.#drawElement(element);
       }
@@ -598,6 +627,10 @@ export class CanvasSceneRenderer {
         return;
       case "markdown":
         this.#drawMarkdown(element);
+        return;
+      case "latex":
+      case "widget":
+      case "asset":
         return;
       case "item":
         return;

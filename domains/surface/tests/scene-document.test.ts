@@ -76,3 +76,59 @@ test("an erase mask is durable geometry and deleting it restores the stroke fact
   assert.deepEqual(restored.snapshot().elements, [ink]);
   assert.deepEqual(erased.changedIds, [mask.id]);
 });
+
+test("document source and widget state remain canonical scene facts", () => {
+  const document = new SceneDocument("document:proof");
+  document.transact([
+    {
+      action: "put",
+      element: {
+        id: "markdown:proof",
+        kind: "markdown",
+        version: 1,
+        x: 80,
+        y: 90,
+        width: 720,
+        height: 260,
+        source: "# Source\n\n$E = mc^2$",
+        color: "#171714",
+        fontSize: 30,
+      },
+    },
+    {
+      action: "put",
+      element: {
+        id: "latex:proof",
+        kind: "latex",
+        version: 1,
+        x: 80,
+        y: 390,
+        width: 720,
+        height: 820,
+        source: "\\documentclass{article}\\begin{document}Proof\\end{document}",
+        mode: "document",
+        color: "#171714",
+        fontSize: 28,
+      },
+    },
+    {
+      action: "put",
+      element: {
+        id: "widget:proof",
+        kind: "widget",
+        version: 1,
+        x: 80,
+        y: 110,
+        width: 720,
+        height: 280,
+        html: "<button>Count</button>",
+        css: "button { font: inherit; }",
+        javascript: "foldthink.setState({ count: foldthink.state.count + 1 })",
+        state: { count: 2 },
+      },
+    },
+  ], "document-source");
+
+  const restored = new SceneDocument("document:proof", document.encodeState()).snapshot();
+  assert.deepEqual(restored.elements, document.snapshot().elements);
+});

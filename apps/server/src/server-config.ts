@@ -1,3 +1,20 @@
+import { isAbsolute } from "node:path";
+
+export type AssetStorageConfig =
+  | Readonly<{
+      kind: "filesystem";
+      directory: string;
+    }>
+  | Readonly<{
+      kind: "s3";
+      bucket: string;
+      region: string;
+      endpoint?: string;
+      forcePathStyle: boolean;
+      accessKeyId: string;
+      secretAccessKey: string;
+    }>;
+
 export type ServerConfig = Readonly<{
   port: number;
   databaseUrl: string;
@@ -5,7 +22,41 @@ export type ServerConfig = Readonly<{
   publicOrigin: string;
   secureCookie: boolean;
   revision: string;
+  assets: AssetStorageConfig;
+  latex: Readonly<{
+    tectonicBinary?: string;
+    pdfInfoBinary?: string;
+    pdfToCairoBinary?: string;
+    bundlePath?: string;
+  }>;
 }>;
+
+function required(environment: NodeJS.ProcessEnv, name: string): string {
+  const value = environment[name]?.trim();
+  if (!value) throw new TypeError(`${name} is required.`);
+  return value;
+}
+
+function readAssetStorage(environment: NodeJS.ProcessEnv): AssetStorageConfig {
+  const kind = environment.ASSET_BACKEND ?? "filesystem";
+  if (kind === "filesystem") {
+    const directory = required(environment, "ASSET_DIRECTORY");
+    if (!isAbsolute(directory)) throw new TypeError("ASSET_DIRECTORY must be absolute.");
+    return Object.freeze({ kind, directory });
+  }
+  if (kind !== "s3") throw new TypeError("ASSET_BACKEND must be filesystem or s3.");
+  const endpoint = environment.ASSET_S3_ENDPOINT?.trim();
+  if (endpoint) new URL(endpoint);
+  return Object.freeze({
+    kind,
+    bucket: required(environment, "ASSET_S3_BUCKET"),
+    region: required(environment, "ASSET_S3_REGION"),
+    ...(endpoint ? { endpoint } : {}),
+    forcePathStyle: environment.ASSET_S3_FORCE_PATH_STYLE === "true",
+    accessKeyId: required(environment, "ASSET_S3_ACCESS_KEY_ID"),
+    secretAccessKey: required(environment, "ASSET_S3_SECRET_ACCESS_KEY"),
+  });
+}
 
 export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
   const port = Number(environment.PORT ?? "8787");
@@ -26,6 +77,10 @@ export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
   if (origin.origin !== publicOrigin) {
     throw new TypeError("PUBLIC_ORIGIN must contain only an origin.");
   }
+  const bundlePath = environment.LATEX_BUNDLE_PATH?.trim();
+  if (bundlePath && !isAbsolute(bundlePath)) {
+    throw new TypeError("LATEX_BUNDLE_PATH must be absolute when configured.");
+  }
   return Object.freeze({
     port,
     databaseUrl,
@@ -33,5 +88,12 @@ export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
     publicOrigin,
     secureCookie: environment.COOKIE_SECURE !== "false",
     revision,
+    assets: readAssetStorage(environment),
+    latex: Object.freeze({
+      ...(environment.TECTONIC_BINARY ? { tectonicBinary: environment.TECTONIC_BINARY } : {}),
+      ...(environment.PDFINFO_BINARY ? { pdfInfoBinary: environment.PDFINFO_BINARY } : {}),
+      ...(environment.PDFTOCAIRO_BINARY ? { pdfToCairoBinary: environment.PDFTOCAIRO_BINARY } : {}),
+      ...(bundlePath ? { bundlePath } : {}),
+    }),
   });
 }

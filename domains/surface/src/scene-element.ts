@@ -55,9 +55,59 @@ export type MarkdownBlock = Readonly<{
   x: number;
   y: number;
   width: number;
+  height?: number;
   source: string;
   color: string;
   fontSize: number;
+}>;
+
+export type LatexBlock = Readonly<{
+  id: string;
+  kind: "latex";
+  version: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  source: string;
+  mode: "math" | "document";
+  color: string;
+  fontSize: number;
+}>;
+
+export type WidgetState =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly WidgetState[]
+  | Readonly<{ [key: string]: WidgetState }>;
+
+export type WidgetBlock = Readonly<{
+  id: string;
+  kind: "widget";
+  version: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  html: string;
+  css: string;
+  javascript: string;
+  state: WidgetState;
+}>;
+
+export type AssetBlock = Readonly<{
+  id: string;
+  kind: "asset";
+  version: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  assetId: string;
+  alt: string;
+  fit: "contain" | "cover";
 }>;
 
 export type WorkspaceItem = Readonly<{
@@ -78,7 +128,15 @@ export type WorkspaceItem = Readonly<{
   stackOrder: number;
 }>;
 
-export type SceneElement = InkStroke | EraseMask | ShapeElement | MarkdownBlock | WorkspaceItem;
+export type SceneElement =
+  | InkStroke
+  | EraseMask
+  | ShapeElement
+  | MarkdownBlock
+  | LatexBlock
+  | WidgetBlock
+  | AssetBlock
+  | WorkspaceItem;
 
 export type SceneChange =
   | Readonly<{
@@ -102,6 +160,36 @@ export class SceneConflictError extends Error {
 
 const finite = (value: number): boolean => Number.isFinite(value);
 const unit = (value: number): boolean => finite(value) && value >= 0 && value <= 1;
+const assetIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function validDocumentFrame(element: Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>): boolean {
+  return finite(element.x) &&
+    finite(element.y) &&
+    finite(element.width) &&
+    finite(element.height) &&
+    element.width > 0 &&
+    element.width <= 10_000 &&
+    element.height > 0 &&
+    element.height <= 10_000;
+}
+
+function validWidgetState(value: WidgetState, depth = 0): boolean {
+  if (depth > 16) return false;
+  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+  if (typeof value === "number") return finite(value);
+  if (Array.isArray(value)) {
+    return value.length <= 1_000 && value.every((item) => validWidgetState(item, depth + 1));
+  }
+  if (typeof value !== "object") return false;
+  const entries = Object.entries(value);
+  return entries.length <= 1_000 && entries.every(([key, item]) =>
+    key.length <= 160 && validWidgetState(item, depth + 1));
+}
 
 export function validateSceneElement(element: SceneElement): void {
   if (!element.id || element.id.length > 160 || !Number.isInteger(element.version) || element.version < 1) {
@@ -173,12 +261,56 @@ export function validateSceneElement(element: SceneElement): void {
         !finite(element.width) ||
         element.width <= 0 ||
         element.width > 10_000 ||
+        (element.height !== undefined &&
+          (!finite(element.height) || element.height <= 0 || element.height > 10_000)) ||
         !finite(element.fontSize) ||
         element.fontSize < 6 ||
         element.fontSize > 240 ||
         element.source.length > 100_000
       ) {
         throw new SceneValidationError("Markdown block is outside its supported range.");
+      }
+      return;
+    case "latex":
+      if (
+        !validDocumentFrame(element) ||
+        (element.mode !== "math" && element.mode !== "document") ||
+        !finite(element.fontSize) ||
+        element.fontSize < 6 ||
+        element.fontSize > 240 ||
+        element.source.length === 0 ||
+        element.source.length > 500_000
+      ) {
+        throw new SceneValidationError("LaTeX block is outside its supported range.");
+      }
+      return;
+    case "widget": {
+      let encodedState: string;
+      try {
+        encodedState = JSON.stringify(element.state);
+      } catch {
+        throw new SceneValidationError("Widget state must be bounded JSON.");
+      }
+      if (
+        !validDocumentFrame(element) ||
+        element.html.length > 100_000 ||
+        element.css.length > 100_000 ||
+        element.javascript.length > 100_000 ||
+        !validWidgetState(element.state) ||
+        encodedState.length > 100_000
+      ) {
+        throw new SceneValidationError("Widget source or state is outside its supported range.");
+      }
+      return;
+    }
+    case "asset":
+      if (
+        !validDocumentFrame(element) ||
+        !assetIdPattern.test(element.assetId) ||
+        element.alt.length > 2_000 ||
+        (element.fit !== "contain" && element.fit !== "cover")
+      ) {
+        throw new SceneValidationError("Asset block is outside its supported range.");
       }
       return;
     case "item":

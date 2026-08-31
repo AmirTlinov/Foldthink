@@ -85,7 +85,7 @@ export class WebMCPAdapter {
       }),
       Object.freeze({
         name: "patch_surface",
-        description: "Add, edit, or delete typed elements on a Foldthink surface and return its receipt.",
+        description: "Add, edit, or delete ink, shapes, Markdown, LaTeX, and isolated interactive widgets on a Foldthink surface, then return its durable receipt.",
         inputSchema: patchSurfaceInputSchema,
         annotations: Object.freeze({ idempotentHint: false, destructiveHint: false }),
         execute: async (

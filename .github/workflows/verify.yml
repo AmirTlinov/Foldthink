@@ -13,6 +13,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://foldthink:foldthink@127.0.0.1:5432/foldthink
       TEST_DATABASE_URL: postgresql://foldthink:foldthink@127.0.0.1:5432/foldthink
+      FOLDTHINK_TEST_TECTONIC: "1"
     services:
       postgres:
         image: postgres:18-alpine
@@ -37,5 +38,29 @@ jobs:
           version: 11.24.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm migrate
+      - name: Install and warm the pinned document compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes poppler-utils
+          curl --fail --location --retry 3 \
+            https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.16.9/tectonic-0.16.9-x86_64-unknown-linux-musl.tar.gz \
+            --output /tmp/tectonic.tar.gz
+          echo "60b13a0826ae7ad9ce34b4a2df06bff2cfcfa6dda8a915477c0cbb84e1a4a902  /tmp/tectonic.tar.gz" | sha256sum --check
+          mkdir -p /tmp/tectonic-bin /tmp/foldthink-latex-warm/output
+          tar -xzf /tmp/tectonic.tar.gz -C /tmp/tectonic-bin
+          sudo install -m 0755 /tmp/tectonic-bin/tectonic /usr/local/bin/tectonic
+          cat > /tmp/foldthink-latex-warm/main.tex <<'EOF'
+          \documentclass{article}
+          \begin{document}
+          \section*{Foldthink proof}
+          A durable page rendered by Tectonic.
+          \[
+          x^2+y^2=z^2
+          \]
+          \end{document}
+          EOF
+          tectonic -X compile --untrusted --outfmt pdf \
+            --outdir /tmp/foldthink-latex-warm/output \
+            /tmp/foldthink-latex-warm/main.tex
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm verify

@@ -10,6 +10,7 @@ tests/
 `-- journeys/
     |-- first-stroke-offline-reload.test.ts # PWA, canvas, and IndexedDB journey.
     |-- professional-ink.test.ts             # Pressure, geometric erasing, resize, and undo journey.
+    |-- rich-document.test.ts                # Markdown, LaTeX, widget, asset, and linked-device journey.
     |-- spatial-notebook-workspace.test.ts # Item, cover, page, stack, and deletion journey.
     |-- webmcp-shared-runtime.test.ts        # Agent patch and visible-page journey.
     `-- two-device-sync.test.ts              # Anonymous link, live delivery, and reload journey.

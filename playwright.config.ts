@@ -20,6 +20,7 @@ const sharedServer = process.env.TEST_DATABASE_URL
         COOKIE_SECURE: "false",
         PORT: "8787",
         REVISION: "playwright",
+        ASSET_DIRECTORY: "/tmp/foldthink-playwright-assets",
       },
     }
   : undefined;

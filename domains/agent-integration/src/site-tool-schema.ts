@@ -92,11 +92,59 @@ const markdownSchema = Object.freeze({
     x: { type: "number" },
     y: { type: "number" },
     width: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
+    height: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
     source: { type: "string", maxLength: 100_000 },
     color: { type: "string" },
     fontSize: { type: "number", minimum: 6, maximum: 240 },
   },
   required: ["id", "kind", "version", "x", "y", "width", "source", "color", "fontSize"],
+  additionalProperties: false,
+});
+
+const latexSchema = Object.freeze({
+  type: "object",
+  properties: {
+    id: { type: "string", minLength: 1, maxLength: 160 },
+    kind: { const: "latex" },
+    version: { type: "integer", minimum: 1 },
+    x: { type: "number" },
+    y: { type: "number" },
+    width: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
+    height: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
+    source: { type: "string", minLength: 1, maxLength: 500_000 },
+    mode: {
+      enum: ["math", "document"],
+      description: "Use math for one KaTeX expression and document for a complete Tectonic LaTeX source.",
+    },
+    color: { type: "string" },
+    fontSize: { type: "number", minimum: 6, maximum: 240 },
+  },
+  required: ["id", "kind", "version", "x", "y", "width", "height", "source", "mode", "color", "fontSize"],
+  additionalProperties: false,
+});
+
+const widgetSchema = Object.freeze({
+  type: "object",
+  properties: {
+    id: { type: "string", minLength: 1, maxLength: 160 },
+    kind: { const: "widget" },
+    version: { type: "integer", minimum: 1 },
+    x: { type: "number" },
+    y: { type: "number" },
+    width: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
+    height: { type: "number", exclusiveMinimum: 0, maximum: 10_000 },
+    html: { type: "string", maxLength: 100_000 },
+    css: { type: "string", maxLength: 100_000 },
+    javascript: {
+      type: "string",
+      maxLength: 100_000,
+      description: "Runs inside an opaque-origin, networkless iframe with only foldthink.state, setState, and edit.",
+    },
+    state: {
+      description: "Bounded JSON persisted through the ordinary workspace command path.",
+    },
+  },
+  required: ["id", "kind", "version", "x", "y", "width", "height", "html", "css", "javascript", "state"],
   additionalProperties: false,
 });
 
@@ -123,7 +171,7 @@ export const patchSurfaceInputSchema: JsonSchema = Object.freeze({
             type: "object",
             properties: {
               action: { const: "put" },
-              element: { oneOf: [inkSchema, shapeSchema, markdownSchema] },
+              element: { oneOf: [inkSchema, shapeSchema, markdownSchema, latexSchema, widgetSchema] },
               expectedVersion: { type: "integer", minimum: 1 },
             },
             required: ["action", "element"],

@@ -1,0 +1,22 @@
+{
+  "name": "@foldthink/asset",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/public-protocol.ts",
+    "./browser": "./src/public-browser.ts",
+    "./server": "./src/public-server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1121.0",
+    "@foldthink/identity": "workspace:*",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

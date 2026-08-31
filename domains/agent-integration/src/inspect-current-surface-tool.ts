@@ -74,6 +74,27 @@ function inspectElement(element: SceneElement): Readonly<Record<string, unknown>
       truncated: element.source.length > 500,
     });
   }
+  if (element.kind === "latex") {
+    return Object.freeze({
+      ...element,
+      source: element.source.slice(0, 2_000),
+      truncated: element.source.length > 2_000,
+    });
+  }
+  if (element.kind === "widget") {
+    const state = JSON.stringify(element.state);
+    return Object.freeze({
+      ...element,
+      html: element.html.slice(0, 1_000),
+      css: element.css.slice(0, 1_000),
+      javascript: element.javascript.slice(0, 2_000),
+      state: state.length <= 2_000 ? element.state : state.slice(0, 2_000),
+      truncated: element.html.length > 1_000 ||
+        element.css.length > 1_000 ||
+        element.javascript.length > 2_000 ||
+        state.length > 2_000,
+    });
+  }
   return Object.freeze({ ...element });
 }
 

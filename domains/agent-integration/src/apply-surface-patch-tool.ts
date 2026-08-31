@@ -12,8 +12,12 @@ export async function applySurfacePatch(
   const patch = parseSurfacePatchInput(input);
   for (const change of patch.changes) {
     if (change.action === "put") {
-      if (change.element.kind === "item" || change.element.kind === "erase") {
-        throw new TypeError("Structural items and geometric erasure use their dedicated semantic commands.");
+      if (
+        change.element.kind === "item" ||
+        change.element.kind === "erase" ||
+        change.element.kind === "asset"
+      ) {
+        throw new TypeError("Structural items, verified assets, and geometric erasure use their dedicated semantic commands.");
       }
       validateSceneElement(change.element);
     }

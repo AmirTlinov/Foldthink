@@ -1,6 +1,6 @@
 import type { WorkspaceItem } from "@foldthink/surface";
 import type { WorkspaceRuntime } from "@foldthink/workspace";
-import type { CanvasSceneRenderer } from "./canvas-scene-renderer.js";
+import type { CanvasSceneRenderer, SurfaceTarget } from "./canvas-scene-renderer.js";
 import type { DrawingToolController } from "./drawing-tool-controller.js";
 import { EraseSession } from "./erase-session.js";
 import { GestureArena } from "./gesture-arena.js";
@@ -18,6 +18,7 @@ export type PointerAdapterOptions = Readonly<{
   spatial: SpatialWorkspaceController;
   tools: DrawingToolController;
   onPageTurn?: (direction: -1 | 1) => void;
+  onSurfaceDoubleTap?: (target: SurfaceTarget) => void;
   onCommitError?: (error: unknown) => void;
 }>;
 
@@ -42,6 +43,7 @@ export class PointerIntentAdapter {
   #moveOffset: ScreenPoint | undefined;
   #holdTimer: ReturnType<typeof setTimeout> | undefined;
   #lastTap: Readonly<{ itemId: string; time: number }> | undefined;
+  #lastSurfaceTap: Readonly<{ surfaceId: string; point: ScreenPoint; time: number }> | undefined;
   #itemPinchScale = 1;
   #twoFingerSequence = false;
   #twoFingerCandidate = false;
@@ -87,10 +89,12 @@ export class PointerIntentAdapter {
     const screen = this.#screenPoint(event);
     const spatial = this.#options.spatial.state();
     const item = spatial.mode === "board" ? this.#options.renderer.itemAtScreen(screen) : undefined;
+    const openItem = spatial.mode === "item" ? this.#options.renderer.item(spatial.itemId) : undefined;
     const draws = spatial.mode !== "entering" && (
       event.pointerType === "pen" || (
         event.pointerType === "mouse" && (
-          spatial.mode === "item" || (!item && this.#options.spatial.selectedItemId() === undefined)
+          (spatial.mode === "item" && openItem?.itemKind !== "document") ||
+          (!item && spatial.mode === "board" && this.#options.spatial.selectedItemId() === undefined)
         )
       )
     );
@@ -319,7 +323,29 @@ export class PointerIntentAdapter {
 
   #tap(contact: TrackedContact, time: number): void {
     const state = this.#options.spatial.state();
+    if (state.mode === "item") {
+      const item = this.#options.renderer.item(state.itemId);
+      if (item?.itemKind !== "document") return;
+      const target = this.#options.renderer.resolveSurfaceTarget(contact.current);
+      const prior = this.#lastSurfaceTap;
+      if (
+        prior?.surfaceId === target.surfaceId &&
+        time - prior.time <= 360 &&
+        Math.hypot(prior.point.x - contact.current.x, prior.point.y - contact.current.y) <= 32
+      ) {
+        this.#options.onSurfaceDoubleTap?.(target);
+        this.#lastSurfaceTap = undefined;
+      } else {
+        this.#lastSurfaceTap = Object.freeze({
+          surfaceId: target.surfaceId,
+          point: contact.current,
+          time,
+        });
+      }
+      return;
+    }
     if (state.mode !== "board") return;
+    this.#lastSurfaceTap = undefined;
     if (!contact.itemId) {
       this.#options.spatial.select();
       this.#lastTap = undefined;

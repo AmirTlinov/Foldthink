@@ -63,6 +63,22 @@ export async function readJson(request: IncomingMessage, maximumBytes = 2_800_00
   }
 }
 
+export async function readBytes(request: IncomingMessage, maximumBytes: number): Promise<Uint8Array> {
+  const contentLength = Number(request.headers["content-length"]);
+  if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
+    throw new HttpBoundaryError(413, "The request body is too large.");
+  }
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.byteLength;
+    if (bytes > maximumBytes) throw new HttpBoundaryError(413, "The request body is too large.");
+    chunks.push(buffer);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
 export function sendJson(response: ServerResponse, status: number, value: unknown): void {
   const body = JSON.stringify(value);
   response.writeHead(status, {
@@ -73,4 +89,21 @@ export function sendJson(response: ServerResponse, status: number, value: unknow
     "permissions-policy": "tools=(self)",
   });
   response.end(body);
+}
+
+export function sendBytes(
+  response: ServerResponse,
+  value: Uint8Array,
+  contentType: string,
+): void {
+  response.writeHead(200, {
+    "content-type": contentType,
+    "content-length": value.byteLength,
+    "content-disposition": "attachment",
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; sandbox",
+    "cross-origin-resource-policy": "same-origin",
+    "x-content-type-options": "nosniff",
+  });
+  response.end(Buffer.from(value));
 }

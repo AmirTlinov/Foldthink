@@ -9,6 +9,8 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@foldthink/asset": "workspace:*",
+    "@foldthink/document": "workspace:*",
     "@foldthink/identity": "workspace:*",
     "@foldthink/synchronization": "workspace:*",
     "pg": "8.23.0"

@@ -1,4 +1,12 @@
 import { WebMCPAdapter } from "@foldthink/agent-integration/browser";
+import { AssetClient } from "@foldthink/asset/browser";
+import {
+  loadBlockEditor,
+  loadDocumentRenderer,
+  type BlockEditor,
+  type DocumentEditRequest,
+  type DocumentRenderer,
+} from "@foldthink/document/browser";
 import { consumeJoinCapability } from "@foldthink/identity/browser";
 import {
   CanvasSceneRenderer,
@@ -37,6 +45,7 @@ export type WebRuntime = Readonly<{
 
 export async function composeWebRuntime(
   canvas: HTMLCanvasElement,
+  documentLayer: HTMLElement,
   onStatus: (status: string) => void,
 ): Promise<WebRuntime> {
   onStatus("Opening local surface");
@@ -66,6 +75,50 @@ export async function composeWebRuntime(
   const tools = new DrawingToolController();
   const renderer = new CanvasSceneRenderer(canvas, runtime.inspect(boardSurfaceId), viewport, spatial);
   for (const surfaceId of runtime.surfaceIds()) renderer.setSnapshot(runtime.inspect(surfaceId));
+  const assets = new AssetClient(identity.workspaceId);
+  let documentReadout: Promise<DocumentRenderer> | undefined;
+  let documentEditor: Promise<BlockEditor> | undefined;
+  let documentsDestroyed = false;
+  const documentFailure = (): void => onStatus("Document tools could not be opened");
+  const editDocument = (request: DocumentEditRequest): void => {
+    documentEditor ??= loadBlockEditor().then((module) => {
+      const editor = new module.BlockEditor({ runtime, assets, onStatus });
+      if (documentsDestroyed) editor.destroy();
+      return editor;
+    });
+    void documentEditor.then((editor) => {
+      if (!documentsDestroyed) editor.open(request);
+    }).catch(documentFailure);
+  };
+  const openDocuments = (): Promise<DocumentRenderer> => {
+    documentReadout ??= loadDocumentRenderer().then((module) => {
+      const documentRenderer = new module.DocumentRenderer({
+        root: documentLayer,
+        runtime,
+        assets,
+        latex: new module.LatexCompilationClient(identity.workspaceId),
+        onEdit: editDocument,
+        onStatus,
+      });
+      if (documentsDestroyed) documentRenderer.destroy();
+      return documentRenderer;
+    });
+    return documentReadout;
+  };
+  const refreshDocument = (): void => {
+    const documentViewport = renderer.documentViewport();
+    if (!documentViewport) {
+      void documentReadout?.then((documentRenderer) => documentRenderer.clear()).catch(documentFailure);
+      return;
+    }
+    void openDocuments().then((documentRenderer) => {
+      const currentViewport = renderer.documentViewport();
+      documentRenderer.show(
+        currentViewport ? runtime.inspect(currentViewport.surfaceId) : undefined,
+        currentViewport,
+      );
+    }).catch(documentFailure);
+  };
   const stopObserving = runtime.observeAll((snapshot) => {
     renderer.setSnapshot(snapshot);
     if (snapshot.surfaceId === boardSurfaceId) {
@@ -76,8 +129,12 @@ export async function composeWebRuntime(
         spatial.select();
       }
     }
+    refreshDocument();
     onStatus("Saved on this device");
   });
+  const stopDocumentSpatialObservation = spatial.observe(refreshDocument);
+  const documentResizeObserver = new ResizeObserver(refreshDocument);
+  documentResizeObserver.observe(canvas);
 
   const turnPage = async (direction: -1 | 1): Promise<void> => {
     const itemId = spatial.selectedItemId();
@@ -104,6 +161,11 @@ export async function composeWebRuntime(
     spatial,
     tools,
     onPageTurn: (direction) => void turnPage(direction).catch(() => onStatus("This page turn could not be saved")),
+    onSurfaceDoubleTap: (target) => {
+      void openDocuments().then((documentRenderer) => {
+        if (renderer.activeSurfaceId() === target.surfaceId) documentRenderer.editAt(target.point);
+      }).catch(documentFailure);
+    },
     onCommitError: () => onStatus("This mark could not be saved"),
   });
   const sync = new SyncClient({
@@ -127,6 +189,7 @@ export async function composeWebRuntime(
   }));
   void webmcp.register().catch(() => undefined);
   sync.start();
+  refreshDocument();
 
   if (import.meta.env.PROD && "serviceWorker" in navigator) {
     void navigator.serviceWorker.register(
@@ -229,6 +292,11 @@ export async function composeWebRuntime(
       sync.stop();
       void webmcp.destroy().catch(() => undefined);
       stopObserving();
+      stopDocumentSpatialObservation();
+      documentResizeObserver.disconnect();
+      documentsDestroyed = true;
+      void documentEditor?.then((editor) => editor.destroy()).catch(() => undefined);
+      void documentReadout?.then((documentRenderer) => documentRenderer.destroy()).catch(() => undefined);
       pointerAdapter.destroy();
       renderer.destroy();
       store.close();
