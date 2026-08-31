@@ -191,7 +191,10 @@ export class SyncClient {
   }
 
   async #request<T>(path: string, init: RequestInit): Promise<T> {
-    const response = await this.#fetch(`${this.#baseUrl}${path}`, {
+    // Window.fetch rejects a foreign receiver. Keep the injected boundary as a
+    // plain function instead of accidentally calling it as a SyncClient method.
+    const performFetch = this.#fetch;
+    const response = await performFetch(`${this.#baseUrl}${path}`, {
       ...init,
       credentials: "include",
     });
