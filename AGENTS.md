@@ -16,7 +16,7 @@ Foldthink/
 |-- eslint.config.mjs         # Source-level language rules.
 |-- dependency-cruiser.cjs    # Machine-enforced ownership boundaries.
 |-- apps/
-|   |-- web/AGENTS.md         # Browser composition root.
+|   |-- web/                  # Executable PWA composition root.
 |   `-- server/AGENTS.md      # Server composition root.
 |-- domains/
 |   |-- surface/              # Durable scene content and CRDT meaning.
@@ -64,8 +64,9 @@ with an identified owner, a contract it fulfills, and a proof in the same change
 The repository has no generic `core`, `shared`, `common`, `utils`, `helpers`,
 `models`, or `services` holding areas.
 
-The application source is not implemented yet. The current executable result is
-the ownership map and its verification harness. Run it with:
+The local thought loop is executable. It activates surface, workspace,
+interaction, local persistence, and the web composition root while later domains
+remain contract-only. Run every active proof with:
 
 ```sh
 pnpm verify

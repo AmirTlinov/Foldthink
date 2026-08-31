@@ -7,7 +7,7 @@ const serverFiles = [
 ];
 
 const browserFiles = [
-  "apps/web/**/*.{ts,tsx}",
+  "apps/web/src/**/*.{ts,tsx}",
   "domains/**/src/public-browser.ts",
 ];
 
@@ -24,6 +24,17 @@ export default tseslint.config(
         Buffer: "readonly",
         console: "readonly",
         process: "readonly",
+      },
+    },
+  },
+  {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: {
+      globals: {
+        URL: "readonly",
+        caches: "readonly",
+        fetch: "readonly",
+        self: "readonly",
       },
     },
   },

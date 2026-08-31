@@ -78,6 +78,8 @@ diagnostic event.
 
 ## Executable proof
 
+Implemented by [ink-session.test.ts](tests/ink-session.test.ts).
+
 - One physical stroke yields one durable `InkStroke` with no replacement flash.
 - Predicted samples never appear in serialized geometry.
 - Pencil pressure changes opacity between the configured minimum and maximum.

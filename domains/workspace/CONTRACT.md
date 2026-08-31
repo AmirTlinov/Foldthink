@@ -83,6 +83,8 @@ publishes that repaired scene as one visible transition.
 
 ## Executable proof
 
+Implemented by [workspace-runtime.test.ts](tests/workspace-runtime.test.ts).
+
 - The same valid command produces the same semantic element changes from the same
   starting state.
 - An invalid command changes no surface and publishes no render snapshot.

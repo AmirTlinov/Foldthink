@@ -113,7 +113,7 @@ module.exports = {
       comment: "A browser graph cannot cross into a server entry point",
       severity: "error",
       from: {
-        path: "^(?:apps/web(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
+        path: "^(?:apps/web/src(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
       },
       to: { path: "^domains/.*/src/public-server\\.tsx?$", reachable: true },
     },
@@ -131,7 +131,7 @@ module.exports = {
       comment: "Browser entry points cannot reach Node.js built-ins",
       severity: "error",
       from: {
-        path: "^(?:apps/web(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
+        path: "^(?:apps/web/src(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
       },
       to: {
         path: `^(?:node:)?(?:${nodeBuiltinPattern})(?:/|$)`,
@@ -143,7 +143,7 @@ module.exports = {
       comment: "Browser entry points cannot reach a PostgreSQL driver",
       severity: "error",
       from: {
-        path: "^(?:apps/web(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
+        path: "^(?:apps/web/src(?:/|$)|domains/.*/src/public-browser\\.tsx?$)",
       },
       to: {
         path: "(?:^|/)node_modules/(?:pg|postgres)(?:/|$)",
@@ -177,5 +177,6 @@ module.exports = {
     exclude: { path: "(?:^|/)(?:dist|coverage)(?:/|$)" },
     tsPreCompilationDeps: true,
     preserveSymlinks: false,
+    tsConfig: { fileName: "tsconfig.base.json" },
   },
 };

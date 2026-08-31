@@ -233,6 +233,8 @@ if (errors.length === 0) {
       "depcruise",
       "--config",
       "dependency-cruiser.cjs",
+      "--ts-config",
+      "tsconfig.base.json",
       "--output-type",
       "err",
       ...cruiseInputs,

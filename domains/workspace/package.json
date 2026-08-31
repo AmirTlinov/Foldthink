@@ -1,0 +1,15 @@
+{
+  "name": "@foldthink/workspace",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/public.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@foldthink/surface": "workspace:*"
+  }
+}

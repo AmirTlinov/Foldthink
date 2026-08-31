@@ -1,0 +1,70 @@
+:root {
+  color: #171714;
+  background: #e7e7e3;
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Rounded", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.surface-shell {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+.surface-shell {
+  position: relative;
+  background: #e7e7e3;
+}
+
+.thinking-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.surface-status {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(13px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(23, 23, 20, 0.48);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.surface-status span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

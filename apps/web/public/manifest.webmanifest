@@ -1,0 +1,17 @@
+{
+  "name": "Foldthink",
+  "short_name": "Foldthink",
+  "description": "Think with your agent on one shared surface.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e7e7e3",
+  "theme_color": "#e7e7e3",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -61,6 +61,8 @@ failed snapshot decode never replaces the last valid local snapshot.
 
 ## Executable proof
 
+Implemented by [scene-document.test.ts](tests/scene-document.test.ts).
+
 - Property tests reorder and duplicate updates and obtain an equal semantic scene.
 - Snapshot plus later updates reconstructs the exact surface state.
 - Delete and erase remain absent after stale-client reconnect.

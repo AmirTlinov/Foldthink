@@ -1,0 +1,15 @@
+{
+  "name": "@foldthink/local-persistence",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./browser": "./src/public-browser.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@foldthink/workspace": "workspace:*"
+  }
+}

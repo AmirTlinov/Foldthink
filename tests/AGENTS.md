@@ -7,6 +7,8 @@ boundaries, such as browser-to-server synchronization and clean restore.
 ```text
 tests/
 |-- AGENTS.md    # Current cross-domain proof map.
+`-- journeys/
+    `-- first-stroke-offline-reload.test.ts # PWA, canvas, and IndexedDB journey.
 ```
 
 A test name describes the observed scenario rather than an implementation layer.

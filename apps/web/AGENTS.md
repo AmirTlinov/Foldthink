@@ -6,7 +6,22 @@ state, synchronization rule, or document format.
 
 ```text
 apps/web/
-|-- AGENTS.md    # Current browser composition-root map.
+|-- AGENTS.md          # Current browser composition-root map.
+|-- package.json       # PWA commands and domain dependencies.
+|-- tsconfig.json      # Browser and JSX compiler boundary.
+|-- vite.config.ts     # Static application build and local proxy.
+|-- index.html         # Immediate browser entry document.
+|-- public/
+|   |-- manifest.webmanifest # Installable application identity.
+|   |-- icon.svg             # Full-bleed scalable application icon.
+|   `-- sw.js                # Versioned application-shell cache.
+|-- src/
+|   |-- main.tsx                  # React composition entry.
+|   |-- foldthink-page.tsx        # Continuous full-screen surface shell.
+|   |-- compose-web-runtime.ts    # Browser domain wiring and teardown.
+|   `-- app-theme.css             # Surface material and minimal status readout.
+`-- tests/
+    `-- web-startup.test.ts       # Direct-to-surface shell proof.
 ```
 
 Allowed imports are enforced by

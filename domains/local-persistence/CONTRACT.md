@@ -77,6 +77,8 @@ record for diagnostics.
 
 ## Executable proof
 
+Implemented by [local-workspace-store.test.ts](tests/local-workspace-store.test.ts).
+
 - A forced crash at every IndexedDB transaction boundary yields either the complete
   operation or the previous state.
 - Reload while offline reconstructs the scene and retains every outbox operation.

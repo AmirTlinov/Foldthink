@@ -5,6 +5,28 @@
 Foldthink is the public home for a notebook that people and agents can see,
 draw on, and change together.
 
+The first executable slice opens directly to a full-screen canvas, keeps Pencil
+input outside React's render path, and commits each completed stroke atomically to
+IndexedDB. It is intentionally a working local surface before it is a feature
+catalog.
+
+## Run locally
+
+Foldthink requires Node.js 24 and pnpm 11.
+
+```sh
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:5173`. Draw with a mouse or Apple Pencil, reload, and the
+same locally durable surface returns. A production PWA build is created with:
+
+```sh
+pnpm build
+pnpm --filter @foldthink/web preview
+```
+
 ## Philosophy
 
 The product principle is documented in [PHILOSOPHY.md](PHILOSOPHY.md).
