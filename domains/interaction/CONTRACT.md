@@ -2,7 +2,7 @@
 
 > Domain: active input, viewport state, and visual readout.
 >
-> Owners: `InkSession`, `ViewportController`, and `SceneRenderer`.
+> Owners: `InkSession`, `ViewportController`, and `CanvasSceneRenderer`.
 
 ## Responsibility split
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | `InkSession` | The active pen or eraser gesture and its actual samples | One pointer gesture |
 | `ViewportController` | Camera transform, selection, pinch focus, and board/item transition | Current browser session |
-| `SceneRenderer` | Pixels derived from scene snapshots, active input, and viewport | One rendered frame |
+| `CanvasSceneRenderer` | Pixels derived from scene snapshots, active input, and viewport | One rendered frame |
 
 The DOM pointer adapter routes Pencil input to `InkSession` and finger gestures to
 `ViewportController`. Routing contains no durable workspace state.
@@ -42,7 +42,7 @@ The DOM pointer adapter routes Pencil input to `InkSession` and finger gestures 
 5. A double-tap on an item performs the explicit open action.
 6. A tap on empty board space clears item selection.
 
-## SceneRenderer guarantees
+## CanvasSceneRenderer guarantees
 
 1. React is outside the per-sample ink path.
 2. The active stroke and durable stroke share one geometry lifecycle and one ID.

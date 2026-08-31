@@ -46,7 +46,7 @@ content.
    input size, and output size.
 4. An artifact key is derived from source hash, compiler version, dependency bundle,
    and compilation parameters.
-5. A successful job publishes the artifact through `AssetService`; it never changes
+5. A successful job publishes the artifact through `AssetRegistry`; it never changes
    document source.
 6. The same artifact key can reuse a verified existing result.
 

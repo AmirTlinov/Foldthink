@@ -48,7 +48,7 @@ Pencil / fingers / React / WebMCP
          WorkspaceRuntime
                 |
                 v
-          SceneDocument --------> SceneRenderer
+          SceneDocument --------> CanvasSceneRenderer
                 |
                 v
       LocalWorkspaceStore
@@ -69,16 +69,16 @@ ownership of the underlying state.
 
 | Domain | Primary owner or owners | Owned responsibility | Contract |
 |---|---|---|---|
-| Workspace | `WorkspaceRuntime` | Semantic commands, invariant checks, and receipts | [Workspace](contracts/workspace.md) |
-| Surface model | `SceneDocument` | Durable scene elements, local coordinates, and CRDT state | [Surface model](contracts/surface.md) |
-| Interaction | `InkSession`, `ViewportController`, `SceneRenderer` | Active input, camera state, and pixels | [Interaction](contracts/interaction.md) |
-| Local persistence | `LocalWorkspaceStore` | IndexedDB replica and durable outgoing queue | [Local persistence](contracts/local-persistence.md) |
-| Synchronization | `SyncClient`, `SyncGateway`, PostgreSQL | Delivery, idempotency, revisions, and recovery stream | [Synchronization](contracts/synchronization.md) |
-| Identity and access | `SessionService` | Anonymous device identity, membership, and linking | [Identity and access](contracts/identity.md) |
-| Documents | `SceneDocument`, `DocumentRenderer`, `LatexCompiler`, `WidgetHost` | Editable source and safe derived representations | [Documents](contracts/documents.md) |
-| Agent integration | `WebMCPAdapter` | Typed agent tools and verified command results | [Agent integration](contracts/agent.md) |
-| Assets | `AssetService`, object storage | Large immutable bytes and their verifiable metadata | [Assets](contracts/assets.md) |
-| Operations | release process, PostgreSQL, pgBackRest | Deployment identity, migrations, backup, restore, and health | [Operations](contracts/operations.md) |
+| Workspace | `WorkspaceRuntime` | Semantic commands, invariant checks, and receipts | [Workspace](domains/workspace/CONTRACT.md) |
+| Surface model | `SceneDocument` | Durable scene elements, local coordinates, and CRDT state | [Surface model](domains/surface/CONTRACT.md) |
+| Interaction | `InkSession`, `ViewportController`, `CanvasSceneRenderer` | Active input, camera state, and pixels | [Interaction](domains/interaction/CONTRACT.md) |
+| Local persistence | `LocalWorkspaceStore` | IndexedDB replica and durable outgoing queue | [Local persistence](domains/local-persistence/CONTRACT.md) |
+| Synchronization | `SyncClient`, `SyncGateway`, PostgreSQL | Delivery, idempotency, revisions, and recovery stream | [Synchronization](domains/synchronization/CONTRACT.md) |
+| Identity and access | `SessionAuthority` | Anonymous device identity, membership, and linking | [Identity and access](domains/identity/CONTRACT.md) |
+| Documents | `SceneDocument`, `DocumentRenderer`, `LatexCompiler`, `WidgetHost` | Editable source and safe derived representations | [Documents](domains/document/CONTRACT.md) |
+| Agent integration | `WebMCPAdapter` | Typed agent tools and verified command results | [Agent integration](domains/agent-integration/CONTRACT.md) |
+| Assets | `AssetRegistry`, object storage | Large immutable bytes and their verifiable metadata | [Assets](domains/asset/CONTRACT.md) |
+| Operations | release process, PostgreSQL, pgBackRest | Deployment identity, migrations, backup, restore, and health | [Operations](operations/CONTRACT.md) |
 
 ## Shape of a domain contract
 
@@ -101,7 +101,9 @@ rather than restating it in a second prose specification.
 
 ## Change discipline
 
-A contract and its executable proof change in the same commit. Moving a state owner
+A domain contract lives beside its executable owner rather than in a parallel
+contract tree. A contract and its executable proof change in the same commit.
+Moving a state owner
 also updates [ARCHITECTURE.md](ARCHITECTURE.md). Changing a public or persisted data
 shape adds an explicit migration or protocol version. Rewording that preserves the
 same observable behavior needs no compatibility layer.

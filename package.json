@@ -1,0 +1,26 @@
+{
+  "name": "foldthink",
+  "private": true,
+  "license": "0BSD",
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "verify:map": "node scripts/verify-project-map.mjs",
+    "verify:contracts": "node scripts/verify-contract-links.mjs",
+    "verify:boundaries": "node scripts/verify-boundaries.mjs",
+    "verify:packages": "pnpm --recursive --if-present --filter '!foldthink' run typecheck && pnpm --recursive --if-present --filter '!foldthink' run test",
+    "verify": "pnpm verify:map && pnpm verify:contracts && pnpm verify:boundaries && pnpm lint && pnpm verify:packages",
+    "test": "pnpm verify"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "dependency-cruiser": "18.2.0",
+    "eslint": "10.9.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0"
+  }
+}

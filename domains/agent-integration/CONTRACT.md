@@ -18,7 +18,7 @@ responses.
 2. Tool registration reuses the page's current anonymous session, workspace, and
    role.
 3. Tool names, descriptions, annotations, and JSON Schemas are generated from
-   versioned definitions in `core`.
+   versioned definitions exported by the domain that owns each command or readout.
 4. Browsers without WebMCP retain the complete human interface.
 5. Widgets in iframes communicate with the top-level adapter rather than
    registering hidden workspace tools.

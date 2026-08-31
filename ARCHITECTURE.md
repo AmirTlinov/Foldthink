@@ -79,51 +79,220 @@ when doing so keeps the code clear.
 | Surface content | `SceneDocument` | Scene elements and their CRDT representation | Two clients converge on one scene regardless of delivery order |
 | Active stroke | `InkSession` | One active point buffer with one `strokeId` | The screen does not contain separate draft and final lines from different owners |
 | Camera and gesture | `ViewportController` | Pan, scale, pinch focus, and board/item transitions | The camera follows the fingers continuously without changing content |
-| Rendering | `SceneRenderer` | Turns a scene snapshot and active stroke into pixels | React does not rerender for every Pencil point |
+| Rendering | `CanvasSceneRenderer` | Turns a scene snapshot and active stroke into pixels | React does not rerender for every Pencil point |
 | Local durability | `LocalWorkspaceStore` | IndexedDB copy, local updates, and outbox | Unacknowledged work survives a local reload |
 | Delivery | `SyncClient` and `SyncGateway` | WebSocket, retries, acknowledgements, and live messages | Retrying one operation does not create a second action |
-| Access | `SessionService` | Anonymous sessions, membership, and one-time linking | A valid capability grants only its assigned role |
+| Access | `SessionAuthority` | Anonymous sessions, membership, and one-time linking | A valid capability grants only its assigned role |
 | Server durability | PostgreSQL | Operations, updates, snapshots, sessions, and asset metadata | An acknowledged revision can be restored into a clean database |
 | Large bytes | S3/R2-compatible storage | Attachments, derived files, and backups | Large bytes stay outside the database, and an offsite copy survives VPS loss |
 | Agent entry point | `WebMCPAdapter` | Turns a typed tool call into a domain command | The agent passes the same model validation and receives a receipt |
 | Document readout | `DocumentRenderer` | Derived Markdown, math, and document layout | Deleting a readout leaves source intact and allows a complete rebuild |
 | LaTeX artifacts | `LatexCompiler` | Restricted Tectonic jobs and reproducible output | One source/version key yields one verified derived artifact |
 | Interactive execution | `WidgetHost` | Sandboxed widget lifecycle and typed messages | A widget can fail without gaining page authority or breaking the document |
-| Asset lifecycle | `AssetService` | Upload authorization, verification, metadata, and scoped retrieval | Only verified ready bytes become scene content |
+| Asset lifecycle | `AssetRegistry` | Upload authorization, verification, metadata, and scoped retrieval | Only verified ready bytes become scene content |
 | Operational proof | Release process and pgBackRest | Exact revision, migration result, offsite backup, and clean restore | A release can identify and restore the state it claims to protect |
 
 Yjs is an internal mechanism of `SceneDocument`. A domain command remains the only
 public editing API available to adapters.
 
 The corresponding observable boundaries are indexed in
-[CONTRACTS.md](CONTRACTS.md) and divided by ownership domain under `contracts/`.
+[CONTRACTS.md](CONTRACTS.md). Each binding contract lives beside its domain owner.
 
-## 5. Proposed repository shape
+## 5. Repository ownership shape
 
-The initial layout reflects only real execution boundaries:
+The repository is organized by the fact that changes, not by the process that
+happens to execute it. `apps/web` and `apps/server` are thin composition roots.
+Product meaning lives under an explicitly named domain.
 
 ```text
 Foldthink/
+|-- AGENTS.md                   # question -> domain -> owner -> proof
 |-- apps/
-|   |-- web/          # PWA, Canvas runtime, React UI, WebMCP adapter
-|   `-- server/       # HTTP API, WebSocket sync, sessions, assets
-|-- packages/
-|   `-- core/         # commands, scene types, schemas, receipts
-|-- migrations/       # ordered PostgreSQL migrations
-|-- infra/            # Caddy, Docker Compose, backup and restore scripts
-|-- contracts/        # one observable contract per ownership domain
-|-- tests/
-|   `-- e2e/          # browser and cross-device contracts
-|-- ARCHITECTURE.md
-|-- CONTRACTS.md      # implementation-contract index and ownership map
-|-- PHILOSOPHY.md
-|-- README.md
-`-- LICENSE
+|   |-- web/                    # browser composition only
+|   `-- server/                 # server composition only
+|-- domains/
+|   |-- surface/                # durable scene meaning
+|   |-- workspace/              # semantic mutation
+|   |-- interaction/            # input, viewport, and pixels
+|   |-- local-persistence/      # browser replica and outbox
+|   |-- identity/               # sessions and access decisions
+|   |-- synchronization/        # delivery and recovery
+|   |-- asset/                  # verified immutable bytes
+|   |-- document/               # source and rich readouts
+|   `-- agent-integration/      # WebMCP adapter
+|-- database/                   # one total PostgreSQL migration order
+|-- operations/                 # deployment and recovery proof
+|-- tests/                      # cross-domain journeys only
+`-- scripts/                    # executable structure checks
 ```
 
-`core` remains the only shared package. It does not depend on the DOM, Node.js,
-PostgreSQL, or a particular UI. A new package appears only with a new ownership
-boundary and a separate verifiable contract.
+`CONTRACTS.md` remains the public index. Each domain's binding contract lives
+beside its owner as `domains/<domain>/CONTRACT.md`; the operations contract lives
+at `operations/CONTRACT.md`. There is no parallel contract tree.
+
+### 5.1 Domain activation
+
+A domain directory may initially contain only its factual map and accepted
+contract. Executable source activates the package only when its owner and proof
+exist in the same change. A synchronization package then has this shape:
+
+```text
+domains/synchronization/
+|-- AGENTS.md
+|-- CONTRACT.md
+|-- package.json
+|-- tsconfig.json
+|-- src/
+|   |-- public-protocol.ts
+|   |-- public-browser.ts
+|   |-- public-server.ts
+|   |-- operation-envelope.ts
+|   |-- committed-receipt.ts
+|   |-- sync-client.ts
+|   |-- websocket-sync-transport.ts
+|   |-- sync-gateway.ts
+|   |-- surface-room.ts
+|   `-- postgres-operation-journal.ts
+`-- tests/
+    |-- sync-client.test.ts
+    |-- sync-gateway.test.ts
+    |-- operation-idempotency.test.ts
+    `-- stale-client-reconnect.test.ts
+```
+
+An empty future class is not architecture. A source directory, package manifest,
+and test directory appear together with working behavior.
+
+### 5.2 Owners and named files
+
+| Domain | Owner files | Other explicitly named responsibilities |
+|---|---|---|
+| Surface | `scene-document.ts` | `scene-element.ts`, `surface-snapshot.ts`, `erase-mask.ts`, `yjs-scene-codec.ts` |
+| Workspace | `workspace-runtime.ts` | `workspace-command.ts`, `command-receipt.ts`, `workspace-invariants.ts` |
+| Interaction | `ink-session.ts`, `viewport-controller.ts`, `canvas-scene-renderer.ts` | `pointer-intent-adapter.ts`, `surface-coordinate-map.ts` |
+| Local persistence | `local-workspace-store.ts` | `indexeddb-schema.ts`, `outbox-record.ts` |
+| Identity | `session-authority.ts` | `device-session.ts`, `workspace-membership.ts`, `join-capability.ts`, `postgres-session-store.ts` |
+| Synchronization | `sync-client.ts`, `sync-gateway.ts` | `operation-envelope.ts`, `committed-receipt.ts`, `postgres-operation-journal.ts` |
+| Asset | `asset-registry.ts` | `asset-record.ts`, `s3-object-store.ts`, `postgres-asset-store.ts` |
+| Document | `document-renderer.ts`, `latex-compiler.ts`, `widget-host.ts` | `block-editor.tsx`, `markdown-pipeline.ts`, `widget-message.ts` |
+| Agent integration | `webmcp-adapter.ts` | `inspect-current-surface-tool.ts`, `apply-surface-patch-tool.ts`, `site-tool-schema.ts` |
+
+`SessionAuthority` names the component that decides access. `AssetRegistry` names
+the component that owns the verified asset lifecycle. The word `Service` is not
+used as a substitute for a responsibility.
+
+### 5.3 Dependency direction
+
+| Domain | May import public APIs from |
+|---|---|
+| Surface | No other Foldthink domain |
+| Workspace | Surface |
+| Interaction | Workspace, surface |
+| Local persistence | Workspace, surface |
+| Identity | No other Foldthink domain |
+| Synchronization | Workspace, surface, local persistence, identity |
+| Asset | Identity |
+| Document | Workspace, surface, asset |
+| Agent integration | Workspace, surface, interaction |
+| `apps/*` | Public entry points of the domains they compose |
+
+```text
+surface
+   ^
+   |
+workspace <---- local-persistence
+   ^                    ^
+   |                    |
+interaction      synchronization <---- identity
+   ^
+   |
+agent-integration
+
+document ----> asset ----> identity
+    |
+    `--------> workspace ----> surface
+```
+
+`dependency-cruiser.cjs` rejects cycles, undeclared domain edges, cross-domain
+internal imports, app dependencies from domains, browser access to server
+entrypoints or Node.js, server access to browser entrypoints, and Yjs imports
+outside the surface domain. ESLint adds source-level browser and server guards.
+
+### 5.4 Mechanism ownership
+
+| Mechanism | Sole owner |
+|---|---|
+| Yjs mutation and decoding | `domains/surface` |
+| Pointer Events and Canvas | `domains/interaction` |
+| IndexedDB | `domains/local-persistence` |
+| WebSocket synchronization protocol | `domains/synchronization` |
+| Cookies, membership, and join capabilities | `domains/identity` |
+| WebMCP browser API | `domains/agent-integration` |
+| CodeMirror, remark, KaTeX, Tectonic, and widget iframe | `domains/document` |
+| S3/R2 application access | `domains/asset` |
+| Caddy and pgBackRest | `operations` |
+
+Synchronization transports a surface update as opaque bytes. It can ask the
+surface public API to validate a candidate state, but it cannot import Yjs or
+interpret scene content itself.
+
+### 5.5 Public package APIs
+
+A domain package exports only explicit entry points:
+
+```json
+{
+  "name": "@foldthink/synchronization",
+  "exports": {
+    "./protocol": "./src/public-protocol.ts",
+    "./browser": "./src/public-browser.ts",
+    "./server": "./src/public-server.ts"
+  }
+}
+```
+
+Imports therefore state their intent:
+
+```ts
+import { SyncClient } from "@foldthink/synchronization/browser";
+import { SyncGateway } from "@foldthink/synchronization/server";
+import type { OperationEnvelope } from "@foldthink/synchronization/protocol";
+```
+
+`package.json#exports` closes deep imports into `src/`. Domain code never imports
+an app.
+
+### 5.6 File-name grammar
+
+| Meaning | Name form | Example |
+|---|---|---|
+| State owner | `<owned-noun>.ts` | `scene-document.ts` |
+| Intent coordinator | `<domain>-runtime.ts` | `workspace-runtime.ts` |
+| External mechanism | `<mechanism>-<responsibility>.ts` | `postgres-operation-journal.ts` |
+| Durable record | `<meaning>-record.ts` | `outbox-record.ts` |
+| Derived readout | `<meaning>-renderer.ts` | `document-renderer.ts` |
+| Input adapter | `<source>-<intent>-adapter.ts` | `pointer-intent-adapter.ts` |
+| Proof | Same stem plus `.test.ts` | `workspace-runtime.test.ts` |
+| Migration | `<time>_<domain>__<action>.sql` | `202608310002_sync__create_surface_streams.sql` |
+
+The tree contains no `core`, `shared`, `common`, `utils`, `helpers`, `models`, or
+general `services` holding area. A reusable fact still has a subject owner. If an
+owner cannot be named, the boundary is not understood well enough to add the file.
+
+The exact navigation chain is:
+
+```text
+What fact changes?
+        |
+        v
+Which domain owns it?
+        |
+        v
+Which owner file decides?
+        |
+        v
+Which test proves its contract?
+```
 
 ## 6. Domain model
 
@@ -289,8 +458,9 @@ the acknowledgement only after commit.
 
 An operation carries typed intent and a CRDT payload scoped to its surfaces.
 `SyncGateway` applies that payload to a validation copy of the materialized state
-and runs the schemas and invariants from `core` before commit. Client validation
-improves UX; the server repeats it as a security boundary. Only an accepted typed
+and invokes the public schemas and invariants of the owning domains before commit.
+Client validation improves UX; the server repeats it as a security boundary. Only
+an accepted typed
 operation enters the journal.
 
 The client removes an outbox record only after acknowledgement. If the operation is
@@ -368,7 +538,7 @@ Coordinates, a handwritten cover title, and page content live in the scene. The
 tables do not keep a competing copy of user meaning. Search indexes, when they
 appear, are explicitly derived and rebuildable.
 
-`AssetService` uploads large attachments to S3/R2-compatible object storage through
+`AssetRegistry` uploads large attachments to S3/R2-compatible object storage through
 a server-scoped capability. PostgreSQL stores their verifiable metadata.
 Compilation outputs and previews are addressed by a hash of source, renderer
 version, and parameters, making them a reproducible cache.
@@ -412,8 +582,9 @@ The initial tool set remains narrow:
 | `create_document` | Creates a document manifest and surface | The document opens on both devices |
 | `focus_item` | Changes the current browser's local camera | Returns the item that actually received focus |
 
-Tool JSON Schemas come from the same `core` schemas that validate application
-commands. A tool returns no cookie, join token, or object-store key. After a
+Tool JSON Schemas come from the same domain schemas that `WorkspaceRuntime` uses
+to validate application commands. A tool returns no cookie, join token, or
+object-store key. After a
 mutation, the agent can inspect again and compare revisions rather than treating
 the tool call itself as proof of success.
 
@@ -464,7 +635,7 @@ provider without changing the browser or domain model when operational load grow
 Security follows the same owners:
 
 1. Caddy provides TLS and one origin for the PWA, API, and WebSocket.
-2. `SessionService` uses a protected cookie, rotation, revocation, and only secret
+2. `SessionAuthority` uses a protected cookie, rotation, revocation, and only secret
    hashes in the database.
 3. HTTP mutations and the WebSocket upgrade validate `Origin`, session, membership,
    and role.

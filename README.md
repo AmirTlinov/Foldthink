@@ -19,6 +19,16 @@ The system design and ownership model are documented in
 Observable implementation boundaries are divided by domain, owner, and
 responsibility in [CONTRACTS.md](CONTRACTS.md).
 
+## Project map
+
+[AGENTS.md](AGENTS.md) routes a behavior question to its ownership domain,
+adjacent contract, and executable proof. Source boundaries are checked by the
+repository verification command:
+
+```sh
+pnpm verify
+```
+
 ## License
 
 Foldthink uses the [0BSD license](LICENSE). You may use, copy, change, and

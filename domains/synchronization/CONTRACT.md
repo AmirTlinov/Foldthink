@@ -62,7 +62,8 @@ record. The client envelope cannot choose the committed actor.
 
 1. Every request is bound to the authenticated session and authorized workspace
    role before payload validation.
-2. Protocol version, size limits, declared surfaces, and core schemas are checked
+2. Protocol version, size limits, declared surfaces, and the owning domains' public
+   schemas are checked
    before persistence.
 3. The CRDT payload is applied to a validation copy of materialized room state, and
    domain invariants pass before commit.

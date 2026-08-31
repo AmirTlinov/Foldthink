@@ -2,11 +2,11 @@
 
 > Domain: anonymous identity, workspace authorization, and device linking.
 >
-> Owner: `SessionService`.
+> Owner: `SessionAuthority`.
 
 ## Responsibility
 
-`SessionService` turns an anonymous browser into a revocable workspace member. It
+`SessionAuthority` turns an anonymous browser into a revocable workspace member. It
 owns device-session credentials, membership roles, join capabilities, and the
 authorization decision used by HTTP, WebSocket, assets, and WebMCP.
 

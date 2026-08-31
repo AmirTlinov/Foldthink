@@ -2,13 +2,13 @@
 
 > Domain: large immutable bytes and derived artifacts.
 >
-> Owners: `AssetService` and S3/R2-compatible object storage.
+> Owners: `AssetRegistry` and S3/R2-compatible object storage.
 
 ## Responsibility split
 
 | Owner | Responsibility |
 |---|---|
-| `AssetService` | Authorization, lifecycle, metadata, validation, and scoped access |
+| `AssetRegistry` | Authorization, lifecycle, metadata, validation, and scoped access |
 | Object storage | Durable bytes addressed by an opaque object key |
 | PostgreSQL `assets` table | Workspace ownership, state, checksum, MIME, size, and object key |
 
@@ -25,7 +25,7 @@ reserved -> uploaded -> ready -> deleted
 
 1. An authorized command reserves a random `assetId` with expected MIME type and
    maximum size.
-2. `AssetService` issues a short-lived, single-purpose upload capability scoped to
+2. `AssetRegistry` issues a short-lived, single-purpose upload capability scoped to
    one object key.
 3. Finalization verifies object presence, actual size, MIME policy, and checksum.
 4. Only a `ready` asset can become visible document or scene content.
